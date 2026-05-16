@@ -118,6 +118,7 @@ Options:
 | `OPENAI_API_KEY` | Passed through to container |
 | `OPENROUTER_API_KEY` | Passed through to container |
 | `GITHUB_TOKEN` | Passed through to container |
+| `PI_IN_DOCKER` | Set to `1` inside the container (can be used for detection) |
 
 ## Tips
 
