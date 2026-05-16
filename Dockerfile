@@ -67,6 +67,6 @@ WORKDIR /home/agent
 # Default environment: use uv for Python
 ENV UV_PYTHON_PREFERENCE=system
 
-# Entry point: Pi in YOLO mode (safe because the container IS the security boundary)
+# Entry point: Pi (permission system runs in yoloMode via config overlay)
 ENTRYPOINT ["pi"]
 CMD ["--help"]

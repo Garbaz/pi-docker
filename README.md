@@ -8,13 +8,10 @@ Run the Pi coding agent in an isolated Docker container with persistent config a
 # 1. Build the base image (one-time, or after changing Dockerfile)
 pi-docker --build
 
-# 2. Run Pi in the current directory
+# 2. Run Pi in the current directory (always YOLO — container is the boundary)
 pi-docker
 
-# 3. Run Pi in YOLO mode (safe — the container IS the security boundary)
-pi-docker --yolo
-
-# 4. Drop into a shell inside the container
+# 3. Drop into a shell inside the container
 pi-docker --shell
 ```
 
@@ -70,7 +67,7 @@ All available NVIDIA GPUs are passed through via `--gpus all`. Requires the [NVI
 
 - Container runs as non-root user (`agent`)
 - No resource limits by default — containers get full access to host CPU, memory, and GPU
-- YOLO mode is safe because the container IS the security boundary — Pi can't touch your host filesystem outside the mounted volumes
+- YOLO mode is always on — the container IS the security boundary, Pi can't touch your host filesystem outside the mounted volumes
 - `.gitconfig` and `known_hosts` are read-only — Pi can read your git identity but can't alter it
 - Permission system config is overlaid with `yoloMode: true` — all `ask` prompts are auto-approved inside the container
 
@@ -104,7 +101,6 @@ Options:
   --build          Build or rebuild the base Pi Docker image
   --extend         Build the project-extended image (requires Dockerfile.extend)
   --shell          Drop into a bash shell inside the container
-  --yolo ARGS...   Run Pi in YOLO mode (skip permissions)
   --stop           Stop the running container for this project
   --clean          Remove containers and project-specific image
   --help           Show this help message

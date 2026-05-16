@@ -10,7 +10,6 @@
 #   pi-docker --shell                  # Drop into a shell inside the container
 #   pi-docker --stop                   # Stop running container
 #   pi-docker --clean                  # Remove container and project image
-#   pi-docker --yolo [args...]         # Run Pi in YOLO mode (skip permissions)
 #   pi-docker --help                   # Show this help
 #
 # The base image (pi-base:latest) is defined in ~/.pi/docker/Dockerfile.
@@ -150,41 +149,7 @@ run_pi() {
         "${extra_args[@]}"
 }
 
-# --- Run with YOLO mode ---
-run_yolo() {
-    local workspace="$1"
-    local slug
-    slug="$(project_slug "$workspace")"
-    local mount_name
-    mount_name="$(project_mount_name "$workspace")"
-    local container_workdir="/home/agent/${mount_name}"
-    local cname="pi-${slug}"
-    local use_image
-    use_image="$(resolve_image "$workspace")"
 
-    info "Starting Pi in YOLO mode (container: ${cname})..."
-    info "Workspace: ${workspace} → ${container_workdir}"
-
-    docker run -it --rm \
-        --name "${cname}" \
-        --init \
-        --gpus all \
-        -e "HOME=/home/agent" \
-        -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
-        -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
-        -e "OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}" \
-        -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
-        -e "PI_IN_DOCKER=1" \
-        -v "${workspace}:${container_workdir}" \
-        -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
-        -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
-        -v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro" \
-        -v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro" \
-        -w "${container_workdir}" \
-        "${use_image}" \
-        --dangerously-skip-permissions \
-        "${@:2}"
-}
 
 # --- Drop into shell ---
 run_shell() {
@@ -258,7 +223,6 @@ ${BLUE}OPTIONS${NC}
   --build          Build or rebuild the base Pi Docker image
   --extend         Build the project-extended image (requires Dockerfile.extend)
   --shell          Drop into a bash shell inside the container
-  --yolo ARGS...   Run Pi in YOLO mode (skip permissions)
   --stop           Stop the running container for this project
   --clean          Remove containers and project-specific image
   --help           Show this help message
@@ -318,10 +282,7 @@ main() {
                 action="shell"
                 shift
                 ;;
-            --yolo)
-                action="yolo"
-                shift
-                ;;
+
             --stop)
                 action="stop"
                 shift
@@ -362,13 +323,7 @@ main() {
             fi
             run_pi "${workspace}" "$@"
             ;;
-        yolo)
-            if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
-                warn "Base image not found. Building it first..."
-                build_base
-            fi
-            run_yolo "${workspace}" "$@"
-            ;;
+
         shell)
             if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
                 warn "Base image not found. Building it first..."
