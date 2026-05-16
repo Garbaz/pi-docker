@@ -1,0 +1,33 @@
+# =============================================================================
+# Pi Docker Isolation — Dockerfile.extend Template
+# =============================================================================
+# Place this in your project root as Dockerfile.extend and customize it.
+# It inherits everything from the pi-base image (Node, Python, uv, git, gh, pi).
+#
+# Build:  docker build -t pi-<project>:latest -f Dockerfile.extend .
+# =============================================================================
+
+FROM pi-base:latest
+
+USER root
+
+# ---- Add project-specific system packages ----
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     libpq-dev \
+#     libsqlite3-dev \
+#     && rm -rf /var/lib/apt/lists/*
+
+# ---- Add project-specific Python packages ----
+# RUN uv pip install --system \
+#     numpy \
+#     pandas \
+#     httpx
+
+# ---- Add project-specific Node packages ----
+# RUN npm install -g typescript ts-node
+
+# ---- Copy project-specific config ----
+# COPY --chown=agent:agent .pi-docker/ /home/agent/.pi-extra/
+
+USER agent
+# WORKDIR is set at runtime by the pi-docker wrapper to /home/agent/<project-name>

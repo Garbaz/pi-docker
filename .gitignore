@@ -1,0 +1,10 @@
+# Pi runtime data (mounted into container, not part of the image)
+agent/
+run/
+tmp/
+
+# Docker build artifacts
+*.tar
+
+# OS files
+.DS_Store

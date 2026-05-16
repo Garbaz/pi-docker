@@ -1,0 +1,13 @@
+# Pi Docker context — only include what's needed for the base image build
+# Project-specific builds use their own context (project root)
+
+# Don't include the wrapper script or compose files in the build context
+pi-docker
+compose.yml
+compose.override.template.yml
+Dockerfile.extend.template
+
+# Don't include Pi runtime data
+agent/
+run/
+tmp/

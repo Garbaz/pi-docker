@@ -1,0 +1,388 @@
+#!/usr/bin/env bash
+# =============================================================================
+# pi-docker — Run Pi coding agent in an isolated Docker container
+# =============================================================================
+# Usage:
+#   pi-docker                          # General session (uses current dir as workspace)
+#   pi-docker --project /path/to/dir   # Specific project directory
+#   pi-docker --build                  # (Re)build the base image first
+#   pi-docker --extend                 # Build project-extended image (from Dockerfile.extend)
+#   pi-docker --shell                  # Drop into a shell inside the container
+#   pi-docker --stop                   # Stop running container
+#   pi-docker --clean                  # Remove container and project image
+#   pi-docker --yolo [args...]         # Run Pi in YOLO mode (skip permissions)
+#   pi-docker --help                   # Show this help
+#
+# The base image (pi-base:latest) is defined in ~/.pi/docker/Dockerfile.
+# Projects can extend it by placing a Dockerfile.extend in their root.
+# =============================================================================
+
+set -euo pipefail
+
+# --- Configuration ---
+PI_DOCKER_DIR="${HOME}/.pi/docker"
+BASE_IMAGE="pi-base:latest"
+
+# --- Colors ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+info()  { echo -e "${BLUE}[pi-docker]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[pi-docker]${NC} $*"; }
+error() { echo -e "${RED}[pi-docker]${NC} $*" >&2; }
+ok()    { echo -e "${GREEN}[pi-docker]${NC} $*"; }
+
+# --- Resolve workspace ---
+resolve_workspace() {
+    local ws="${1:-$(pwd)}"
+    # Resolve to absolute path
+    ws="$(cd "$ws" 2>/dev/null && pwd)" || {
+        error "Workspace directory does not exist: $1"
+        exit 1
+    }
+    echo "$ws"
+}
+
+# --- Project slug from directory name (for image/container naming) ---
+project_slug() {
+    basename "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/^-\|-$//g'
+}
+
+# --- Project mount name (preserves case, for the container workdir path) ---
+project_mount_name() {
+    basename "$1"
+}
+
+# --- Build base image ---
+build_base() {
+    info "Building base image ${BASE_IMAGE}..."
+    docker build \
+        --build-arg HOST_UID="$(id -u)" \
+        --build-arg HOST_GID="$(id -g)" \
+        -t "${BASE_IMAGE}" \
+        "${PI_DOCKER_DIR}/"
+    ok "Base image built: ${BASE_IMAGE}"
+}
+
+# --- Build project-extended image ---
+build_extended() {
+    local workspace="$1"
+    local slug
+    slug="$(project_slug "$workspace")"
+    local extend_file="${workspace}/Dockerfile.extend"
+    local project_image="pi-${slug}:latest"
+
+    if [[ ! -f "$extend_file" ]]; then
+        warn "No Dockerfile.extend found in ${workspace}"
+        warn "Copy the template: cp ${PI_DOCKER_DIR}/Dockerfile.extend.template ${workspace}/Dockerfile.extend"
+        info "Falling back to base image ${BASE_IMAGE}"
+        return
+    fi
+
+    # Ensure base image exists
+    if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
+        warn "Base image not found, building it first..."
+        build_base
+    fi
+
+    info "Building extended image ${project_image} from ${extend_file}..."
+    docker build \
+        --build-arg HOST_UID="$(id -u)" \
+        --build-arg HOST_GID="$(id -g)" \
+        -t "${project_image}" \
+        -f "${extend_file}" \
+        "${workspace}/"
+    ok "Extended image built: ${project_image}"
+}
+
+# --- Resolve which image to use (extended if available, otherwise base) ---
+resolve_image() {
+    local workspace="$1"
+    local slug
+    slug="$(project_slug "$workspace")"
+    local project_image="pi-${slug}:latest"
+
+    if docker image inspect "${project_image}" &>/dev/null; then
+        echo "${project_image}"
+        ok "Using extended image: ${project_image}"
+    else
+        echo "${BASE_IMAGE}"
+    fi
+}
+
+# --- Run Pi container ---
+run_pi() {
+    local workspace="$1"
+    local slug
+    slug="$(project_slug "$workspace")"
+    local mount_name
+    mount_name="$(project_mount_name "$workspace")"
+    local container_workdir="/home/agent/${mount_name}"
+    local cname="pi-${slug}"
+    local use_image
+    use_image="$(resolve_image "$workspace")"
+    local extra_args=("${@:2}")
+
+    info "Starting Pi in container '${cname}'..."
+    info "Workspace: ${workspace} → ${container_workdir}"
+    info "Image: ${use_image}"
+
+    docker run -it --rm \
+        --name "${cname}" \
+        --init \
+        --gpus all \
+        -e "HOME=/home/agent" \
+        -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
+        -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
+        -e "OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}" \
+        -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
+        -e "PI_IN_DOCKER=1" \
+        -v "${workspace}:${container_workdir}" \
+        -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
+        -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
+        -v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro" \
+        -v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro" \
+        -w "${container_workdir}" \
+        "${use_image}" \
+        "${extra_args[@]}"
+}
+
+# --- Run with YOLO mode ---
+run_yolo() {
+    local workspace="$1"
+    local slug
+    slug="$(project_slug "$workspace")"
+    local mount_name
+    mount_name="$(project_mount_name "$workspace")"
+    local container_workdir="/home/agent/${mount_name}"
+    local cname="pi-${slug}"
+    local use_image
+    use_image="$(resolve_image "$workspace")"
+
+    info "Starting Pi in YOLO mode (container: ${cname})..."
+    info "Workspace: ${workspace} → ${container_workdir}"
+
+    docker run -it --rm \
+        --name "${cname}" \
+        --init \
+        --gpus all \
+        -e "HOME=/home/agent" \
+        -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
+        -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
+        -e "OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}" \
+        -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
+        -e "PI_IN_DOCKER=1" \
+        -v "${workspace}:${container_workdir}" \
+        -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
+        -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
+        -v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro" \
+        -v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro" \
+        -w "${container_workdir}" \
+        "${use_image}" \
+        --dangerously-skip-permissions \
+        "${@:2}"
+}
+
+# --- Drop into shell ---
+run_shell() {
+    local workspace="$1"
+    local slug
+    slug="$(project_slug "$workspace")"
+    local mount_name
+    mount_name="$(project_mount_name "$workspace")"
+    local container_workdir="/home/agent/${mount_name}"
+    local cname="pi-${slug}-shell"
+    local use_image
+    use_image="$(resolve_image "$workspace")"
+
+    info "Opening shell in Pi container (workspace: ${workspace} → ${container_workdir})..."
+
+    docker run -it --rm \
+        --name "${cname}" \
+        --gpus all \
+        -e "HOME=/home/agent" \
+        -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
+        -e "PI_IN_DOCKER=1" \
+        -v "${workspace}:${container_workdir}" \
+        -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
+        -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
+        -v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro" \
+        -v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro" \
+        -w "${container_workdir}" \
+        --entrypoint /bin/bash \
+        "${use_image}"
+}
+
+# --- Stop container ---
+stop_container() {
+    local workspace="$1"
+    local slug
+    slug="$(project_slug "$workspace")"
+    local cname="pi-${slug}"
+
+    info "Stopping container ${cname}..."
+    docker stop "${cname}" 2>/dev/null && ok "Stopped ${cname}" || warn "Container ${cname} not running"
+}
+
+# --- Clean up ---
+clean() {
+    local workspace="$1"
+    local slug
+    slug="$(project_slug "$workspace")"
+    local cname="pi-${slug}"
+    local project_image="pi-${slug}:latest"
+
+    info "Cleaning up Pi containers and images for project '${slug}'..."
+    docker rm -f "${cname}" "${cname}-shell" 2>/dev/null || true
+
+    if docker image inspect "${project_image}" &>/dev/null; then
+        docker rmi "${project_image}" 2>/dev/null && ok "Removed image ${project_image}" || true
+    fi
+
+    ok "Clean complete for '${slug}'"
+}
+
+# --- Help ---
+show_help() {
+    cat <<EOF
+${GREEN}pi-docker${NC} — Run Pi coding agent in an isolated Docker container
+
+${BLUE}USAGE${NC}
+  pi-docker [OPTIONS] [PI_ARGS...]
+
+${BLUE}OPTIONS${NC}
+  --project DIR    Use DIR as workspace (default: current directory)
+  --build          Build or rebuild the base Pi Docker image
+  --extend         Build the project-extended image (requires Dockerfile.extend)
+  --shell          Drop into a bash shell inside the container
+  --yolo ARGS...   Run Pi in YOLO mode (skip permissions)
+  --stop           Stop the running container for this project
+  --clean          Remove containers and project-specific image
+  --help           Show this help message
+
+${BLUE}PROJECT EXTENSIONS${NC}
+  To add project-specific dependencies:
+
+  1. Copy the template:
+     cp ~/.pi/docker/Dockerfile.extend.template ./Dockerfile.extend
+
+  2. Edit Dockerfile.extend (it starts FROM pi-base:latest):
+     RUN apt-get update && apt-get install -y libpq-dev
+     RUN uv pip install --system numpy pandas
+
+  3. Build the extended image:
+     pi-docker --extend
+
+  4. Run Pi — the extended image is used automatically:
+     pi-docker
+
+${BLUE}ENVIRONMENT VARIABLES${NC}
+  PI_WORKSPACE        Workspace directory (default: current directory)
+  ANTHROPIC_API_KEY   Passed through to the container
+  OPENAI_API_KEY      Passed through to the container
+  OPENROUTER_API_KEY  Passed through to the container
+  GITHUB_TOKEN        Passed through to the container
+
+${BLUE}FILES${NC}
+  ~/.pi/docker/Dockerfile                Base Pi image definition
+  ~/.pi/docker/Dockerfile.extend.template  Template for project extensions
+  ~/.pi/docker/permission-config.json    YOLO mode config for the container
+  ./Dockerfile.extend                    Project-specific image extensions
+
+EOF
+}
+
+# --- Main ---
+main() {
+    local workspace=""
+    local action="run"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project)
+                workspace="$2"
+                shift 2
+                ;;
+            --build)
+                action="build"
+                shift
+                ;;
+            --extend)
+                action="extend"
+                shift
+                ;;
+            --shell)
+                action="shell"
+                shift
+                ;;
+            --yolo)
+                action="yolo"
+                shift
+                ;;
+            --stop)
+                action="stop"
+                shift
+                ;;
+            --clean)
+                action="clean"
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    # Resolve workspace
+    workspace="$(resolve_workspace "${workspace:-$(pwd)}")"
+
+    case "${action}" in
+        build)
+            build_base
+            ;;
+        extend)
+            build_extended "${workspace}"
+            ;;
+        run)
+            # Ensure base image exists
+            if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
+                warn "Base image not found. Building it first..."
+                build_base
+            fi
+            run_pi "${workspace}" "$@"
+            ;;
+        yolo)
+            if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
+                warn "Base image not found. Building it first..."
+                build_base
+            fi
+            run_yolo "${workspace}" "$@"
+            ;;
+        shell)
+            if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
+                warn "Base image not found. Building it first..."
+                build_base
+            fi
+            run_shell "${workspace}"
+            ;;
+        stop)
+            stop_container "${workspace}"
+            ;;
+        clean)
+            clean "${workspace}"
+            ;;
+    esac
+}
+
+main "$@"
