@@ -77,20 +77,6 @@ RUN ARCH=$(dpkg --print-architecture) \
 RUN curl -fsSL https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-unknown-linux-musl.tar.gz \
     | tar xz -C /usr/local/bin rtk
 
-# Install Rust toolchain via rustup (stable, default profile + extras)
-# CARGO_HOME/RUSTUP_HOME set before install so rustup uses these paths.
-ENV CARGO_HOME=/usr/local/cargo
-ENV RUSTUP_HOME=/usr/local/rustup
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-    | sh -s -- -y --no-modify-path --profile default \
-    && "${CARGO_HOME}/bin/rustup" component add rust-analyzer \
-    && chmod -R a+rwX "${CARGO_HOME}" "${RUSTUP_HOME}"
-ENV PATH="${CARGO_HOME}/bin:${PATH}"
-
-# Install Pi coding agent globally (as root into /usr/local)
-RUN npm install -g npm@latest \
-    && npm install -g @earendil-works/pi-coding-agent
-
 # Create a non-root user matching the host UID/GID for volume mount permissions.
 # Default to 1000:1000; override at build time with --build-arg.
 ARG HOST_UID=1000
@@ -99,6 +85,10 @@ RUN groupadd -g ${HOST_GID} agent \
     && useradd -m -u ${HOST_UID} -g ${HOST_GID} -s /bin/bash agent \
     && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
     && chmod 0440 /etc/sudoers.d/agent
+
+# Install Pi coding agent globally (as root into /usr/local)
+RUN npm install -g npm@latest \
+    && npm install -g @earendil-works/pi-coding-agent
 
 # Allow the agent user to install global npm packages without sudo.
 # npm's default prefix (/usr/local) is root-owned. Redirect global installs
@@ -109,11 +99,20 @@ ENV PATH="/home/agent/.npm-global/bin:${PATH}"
 RUN mkdir -p /home/agent/.npm-global /home/agent/.pi/agent \
     && chown -R agent:agent /home/agent/.npm-global /home/agent/.pi
 
-# Switch to non-root user
-# WORKDIR is set at runtime via the wrapper script to /home/agent/<project-name>
-# so that tools inside the container see the real project directory name.
+# Switch to non-root user for everything below (and at runtime)
 USER agent
 WORKDIR /home/agent
+
+# Install Rust toolchain via rustup (stable, minimal profile + extras).
+# Installed into the agent user's home — the normal location on a Linux system.
+# We use minimal profile to avoid rust-docs (~800MB), then add only what's needed.
+# Runs as the agent user so files are owned correctly from the start.
+ENV CARGO_HOME=/home/agent/.cargo
+ENV RUSTUP_HOME=/home/agent/.rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --no-modify-path --profile minimal \
+    && "${CARGO_HOME}/bin/rustup" component add clippy rustfmt rust-analyzer
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
 # Default environment
 ENV UV_PYTHON_PREFERENCE=system
