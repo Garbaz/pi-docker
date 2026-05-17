@@ -62,13 +62,13 @@ project_mount_name() {
 
 # --- Build base image ---
 build_base() {
-    info "Building base image ${BASE_IMAGE}..."
+    info "Checking base image ${BASE_IMAGE}..."
     docker build \
         --build-arg HOST_UID="$(id -u)" \
         --build-arg HOST_GID="$(id -g)" \
         -t "${BASE_IMAGE}" \
-        "${PI_DOCKER_DIR}/"
-    ok "Base image built: ${BASE_IMAGE}"
+        "${PI_DOCKER_DIR}/" 2>&1 | tail -1
+    ok "Base image ready: ${BASE_IMAGE}"
 }
 
 # --- Build project-extended image ---
@@ -86,11 +86,8 @@ build_extended() {
         return
     fi
 
-    # Ensure base image exists
-    if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
-        warn "Base image not found, building it first..."
-        build_base
-    fi
+    # Base image must exist for extending
+    build_base
 
     info "Building extended image ${project_image} from ${extend_file}..."
     docker build \
@@ -357,20 +354,15 @@ main() {
             build_extended "${workspace}"
             ;;
         run)
-            # Ensure base image exists
-            if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
-                warn "Base image not found. Building it first..."
-                build_base
-            fi
-            run_pi "${workspace}" "$@"
+    # Build base image (Docker layer cache makes this instant when unchanged)
+    build_base
+    run_pi "${workspace}" "$@"
             ;;
 
         shell)
-            if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
-                warn "Base image not found. Building it first..."
-                build_base
-            fi
-            run_shell "${workspace}"
+    # Build base image (Docker layer cache makes this instant when unchanged)
+    build_base
+    run_shell "${workspace}"
             ;;
         stop)
             stop_container "${workspace}"
