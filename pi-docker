@@ -7,6 +7,7 @@
 #   pi-docker --project /path/to/dir   # Specific project directory
 #   pi-docker --attach                 # Attach to a running container for this project
 #   pi-docker --gpus                 # Run with NVIDIA GPU passthrough
+#   pi-docker --host-net             # Use host network (container sees localhost)
 #   pi-docker --build               # Build image (if needed) then run Pi
 #   pi-docker --rebuild              # Clean rebuild from scratch then run Pi
 #   pi-docker --extend                 # Build project-extended image (from Dockerfile.extend)
@@ -187,6 +188,12 @@ run_pi() {
         gpu_args=(--gpus all)
     fi
 
+    # Host network (opt-in via --host-net flag)
+    local net_args=()
+    if [[ "$host_network" -eq 1 ]]; then
+        net_args=(--network host)
+    fi
+
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
@@ -198,6 +205,7 @@ run_pi() {
         --name "${cname}" \
         --init \
         "${gpu_args[@]+"${gpu_args[@]}"}" \
+        "${net_args[@]+"${net_args[@]}"}" \
         -e "HOME=/home/agent" \
         -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
         -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
@@ -272,6 +280,12 @@ run_shell() {
         gpu_args=(--gpus all)
     fi
 
+    # Host network (opt-in via --host-net flag)
+    local net_args=()
+    if [[ "$host_network" -eq 1 ]]; then
+        net_args=(--network host)
+    fi
+
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
@@ -281,6 +295,7 @@ run_shell() {
     docker run ${tty_flag} --rm \
         --name "${cname}" \
         "${gpu_args[@]+"${gpu_args[@]}"}" \
+        "${net_args[@]+"${net_args[@]}"}" \
         -e "HOME=/home/agent" \
         -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
         -e "PI_IN_DOCKER=1" \
@@ -357,6 +372,7 @@ ${BLUE}OPTIONS${NC}
   --project DIR    Use DIR as workspace (default: current directory)
   --attach         Attach to a running container for this project
   --gpus           Pass all NVIDIA GPUs to the container (--gpus all)
+  --host-net       Use host network namespace (container sees localhost)
   --build          Build the base image then run Pi
   --rebuild          Clean rebuild from scratch (no cache) then run Pi
   --build-only       Build the base image without running Pi
@@ -380,6 +396,15 @@ ${BLUE}GPU PASSTHROUGH${NC}
   Requires the NVIDIA Container Toolkit on the host.
 
     pi-docker --gpus       # Start Pi with GPU access
+
+${BLUE}HOST NETWORKING${NC}
+  By default the container uses Docker's bridge network (isolated).
+  Pass --host-net to share the host's network namespace — the container
+  can reach services on localhost (e.g. local STT/LLM servers).
+
+    pi-docker --host-net   # Container uses host network
+
+  Note: --host-net and --gpus can be combined.
 
 ${BLUE}PROJECT EXTENSIONS${NC}
   To add project-specific dependencies:
@@ -418,6 +443,7 @@ main() {
     local workspace=""
     local action="run"
     local gpu_passthrough=0
+    local host_network=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -431,6 +457,10 @@ main() {
                 ;;
             --gpus)
                 gpu_passthrough=1
+                shift
+                ;;
+            --host-net)
+                host_network=1
                 shift
                 ;;
             --rebuild)
