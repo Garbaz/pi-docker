@@ -62,13 +62,15 @@ project_mount_name() {
 
 # --- Build base image ---
 build_base() {
-    info "Checking base image ${BASE_IMAGE}..."
-    docker build \
+    if docker build \
         --build-arg HOST_UID="$(id -u)" \
         --build-arg HOST_GID="$(id -g)" \
         -t "${BASE_IMAGE}" \
-        "${PI_DOCKER_DIR}/" 2>&1 | tail -1
-    ok "Base image ready: ${BASE_IMAGE}"
+        "${PI_DOCKER_DIR}/" 2>&1 | grep -q 'CACHED'; then
+        ok "Base image up to date: ${BASE_IMAGE}"
+    else
+        ok "Base image built: ${BASE_IMAGE}"
+    fi
 }
 
 # --- Build project-extended image ---
