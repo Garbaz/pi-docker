@@ -6,8 +6,8 @@ Run the [Pi coding agent](https://github.com/earendil-works/pi-coding-agent) in 
 
 - **One command to run**: `pi-docker` builds the image, mounts your project, and starts Pi
 - **YOLO by default**: Permission system runs in `yoloMode` inside the container — no prompts
-- **GPU passthrough**: All NVIDIA GPUs available via `--gpus all`
 - **Persistent config**: `~/.pi/agent` is mounted read-write — settings, auth, and sessions persist
+- **Cached extensions**: `~/.pi/docker/npm-global` persists npm packages across runs — fast startup
 - **Project-aware workspace**: Mounts at `/home/agent/<dirname>` so tools see the real project name
 - **Per-project extensions**: Add project-specific deps via `Dockerfile.extend` (inherits from base)
 - **Non-root container**: Matches your host UID/GID so volume mounts work correctly
@@ -15,7 +15,6 @@ Run the [Pi coding agent](https://github.com/earendil-works/pi-coding-agent) in 
 ## Requirements
 
 - [Docker Engine](https://docs.docker.com/engine/install/) 20.10+ (with `docker run` support)
-- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/installation-guide.html) (for GPU passthrough)
 - Bash (for the wrapper script)
 
 ## Install
@@ -96,7 +95,7 @@ A minimal `permission-config.json` with `{ "yoloMode": true }` is mounted over t
 - The container IS the security boundary — Pi can only access the mounted volumes
 - `.gitconfig` and `.ssh/known_hosts` are mounted read-only
 - Container runs as non-root user `agent`
-- No resource limits — containers get full access to host CPU, memory, and GPU
+- No resource limits — containers get full access to host CPU and memory
 
 ## Project Extensions
 

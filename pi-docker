@@ -23,11 +23,6 @@ set -euo pipefail
 PI_DOCKER_DIR="${HOME}/.pi/docker"
 BASE_IMAGE="pi-base:latest"
 
-# --- GPU detection ---
-has_nvidia_runtime() {
-    docker info 2>/dev/null | grep -q 'Runtimes:.*nvidia'
-}
-
 # --- Colors ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -179,12 +174,6 @@ run_pi() {
     [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
     [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
 
-    # GPU passthrough (only if NVIDIA runtime is available)
-    local gpu_args=()
-    if has_nvidia_runtime; then
-        gpu_args=(--gpus all)
-    fi
-
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
@@ -195,7 +184,6 @@ run_pi() {
     docker run ${tty_flag} --rm \
         --name "${cname}" \
         --init \
-        "${gpu_args[@]+"${gpu_args[@]}"}" \
         -e "HOME=/home/agent" \
         -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
         -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
@@ -249,12 +237,6 @@ run_shell() {
     [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
     [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
 
-    # GPU passthrough (only if NVIDIA runtime is available)
-    local gpu_args=()
-    if has_nvidia_runtime; then
-        gpu_args=(--gpus all)
-    fi
-
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
@@ -263,7 +245,6 @@ run_shell() {
 
     docker run ${tty_flag} --rm \
         --name "${cname}" \
-        "${gpu_args[@]+"${gpu_args[@]}"}" \
         -e "HOME=/home/agent" \
         -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
         -e "PI_IN_DOCKER=1" \
