@@ -62,15 +62,12 @@ project_mount_name() {
 
 # --- Build base image ---
 build_base() {
-    if docker build \
+    docker build \
         --build-arg HOST_UID="$(id -u)" \
         --build-arg HOST_GID="$(id -g)" \
         -t "${BASE_IMAGE}" \
-        "${PI_DOCKER_DIR}/" 2>&1 | grep -q 'CACHED'; then
-        ok "Base image up to date: ${BASE_IMAGE}"
-    else
-        ok "Base image built: ${BASE_IMAGE}"
-    fi
+        "${PI_DOCKER_DIR}/"
+    ok "Base image built: ${BASE_IMAGE}"
 }
 
 # --- Build project-extended image ---
@@ -89,7 +86,10 @@ build_extended() {
     fi
 
     # Base image must exist for extending
-    build_base
+    if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
+        error "Base image not found. Run: pi-docker --build"
+        exit 1
+    fi
 
     info "Building extended image ${project_image} from ${extend_file}..."
     docker build \
@@ -99,6 +99,23 @@ build_extended() {
         -f "${extend_file}" \
         "${workspace}/"
     ok "Extended image built: ${project_image}"
+}
+
+# --- Check if base image needs rebuilding and warn ---
+check_stale_image() {
+    if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
+        error "Base image not found. Run: pi-docker --build"
+        exit 1
+    fi
+
+    local dockerfile_mtime image_ctime image_epoch
+    dockerfile_mtime="$(stat -c '%Y' "${PI_DOCKER_DIR}/Dockerfile" 2>/dev/null)" || return
+    image_ctime="$(docker image inspect "${BASE_IMAGE}" --format '{{.Created}}' 2>/dev/null)" || return
+    image_epoch="$(date -d "${image_ctime}" '+%s' 2>/dev/null)" || return
+
+    if [[ "${dockerfile_mtime}" -gt "${image_epoch}" ]]; then
+        warn "Dockerfile changed since last build. Run: pi-docker --build"
+    fi
 }
 
 # --- Resolve which image to use (extended if available, otherwise base) ---
@@ -356,15 +373,13 @@ main() {
             build_extended "${workspace}"
             ;;
         run)
-    # Build base image (Docker layer cache makes this instant when unchanged)
-    build_base
-    run_pi "${workspace}" "$@"
+            check_stale_image
+            run_pi "${workspace}" "$@"
             ;;
 
         shell)
-    # Build base image (Docker layer cache makes this instant when unchanged)
-    build_base
-    run_shell "${workspace}"
+            check_stale_image
+            run_shell "${workspace}"
             ;;
         stop)
             stop_container "${workspace}"
