@@ -83,7 +83,7 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --no-modify-path --profile default \
-    && rustup component add rust-analyzer \
+    && "${CARGO_HOME}/bin/rustup" component add rust-analyzer \
     && chmod -R a+rwX "${CARGO_HOME}" "${RUSTUP_HOME}"
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
