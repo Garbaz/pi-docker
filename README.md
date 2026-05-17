@@ -77,11 +77,12 @@ Built from the `Dockerfile`. Contains:
 - Python 3 + [uv](https://docs.astral.sh/uv/)
 - Rust toolchain (rustup stable, minimal profile)
 - Git, GitHub CLI (`gh`), git-delta
-- curl, wget, jq, ripgrep, fd-find, vim, nano, less, procps
-- SSH client, sudo (passwordless for agent user)
+- curl, wget, jq, ripgrep, fd (symlinked from `fd-find`), vim, nano, less, procps
+- SSH client, sudo (passwordless for agent user), patch, file, pkg-config
 - rtk (LLM token optimizer)
 - Pi coding agent (installed globally via npm)
 - Non-root user `agent` matching your host UID/GID
+- UTF-8 locale, `EDITOR=vim`
 
 ### Volume Mounts
 

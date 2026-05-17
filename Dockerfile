@@ -35,7 +35,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     openssh-client \
     sudo \
+    patch \
+    file \
+    pkg-config \
+    locales \
     && rm -rf /var/lib/apt/lists/*
+
+# fd-find installs as 'fdfind' — symlink to 'fd' so agents find it by the expected name
+RUN ln -s /usr/bin/fdfind /usr/local/bin/fd
+
+# Set up UTF-8 locale (many tools break without it)
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8
 
 # Install uv (fast Python package manager — matches host preference)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
