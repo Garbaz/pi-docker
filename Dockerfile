@@ -8,7 +8,7 @@
 # Build:  docker build -t pi-base:latest /home/tobi/.pi/docker
 # =============================================================================
 
-FROM node:22-slim AS base
+FROM node:22.22-slim AS base
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -43,6 +43,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
+
+# Upgrade npm to latest to suppress version notices during runtime installs
+RUN npm install -g npm@latest
 
 # Install Pi coding agent globally (as root into /usr/local)
 RUN npm install -g @earendil-works/pi-coding-agent
