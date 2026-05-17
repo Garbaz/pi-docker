@@ -48,6 +48,15 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 RUN curl -fsSL https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-unknown-linux-musl.tar.gz \
     | tar xz -C /usr/local/bin rtk
 
+# Install Rust toolchain via rustup (stable, minimal profile)
+# CARGO_HOME/RUSTUP_HOME set before install so rustup uses these paths.
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --no-modify-path --profile minimal \
+    && chmod -R a+rwX "${CARGO_HOME}" "${RUSTUP_HOME}"
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+
 # Install Pi coding agent globally (as root into /usr/local)
 RUN npm install -g npm@latest \
     && npm install -g @earendil-works/pi-coding-agent
