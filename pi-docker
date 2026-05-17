@@ -150,10 +150,10 @@ container_name() {
     exit 1
 }
 
-# --- Find a running container for a project (returns name or empty) ---
-find_running_container() {
+# --- Find running containers for a project ---
+find_running_containers() {
     local slug="$1"
-    docker ps --filter "name=pi-${slug}-" --format '{{.Names}}' 2>/dev/null | head -1
+    docker ps --filter "name=pi-${slug}-" --format '{{.Names}}' 2>/dev/null
 }
 
 # --- Run Pi container ---
@@ -215,12 +215,27 @@ attach_pi() {
     slug="$(project_slug "$workspace")"
     local extra_args=("${@:2}")
 
-    local cname
-    cname="$(find_running_container "$slug")"
-    if [[ -z "$cname" ]]; then
+    local containers
+    containers="$(find_running_containers "$slug")"
+    if [[ -z "$containers" ]]; then
         error "No running container for project '${slug}'"
         error "Start one first: pi-docker"
         exit 1
+    fi
+
+    local count
+    count="$(echo "$containers" | wc -l)"
+    local cname
+    if [[ "$count" -gt 1 ]]; then
+        warn "Multiple containers running for '${slug}':"
+        echo "$containers" | while read -r name; do
+            warn "  $name"
+        done
+        # Use the first one (most recently started — docker ps is newest first)
+        cname="$(echo "$containers" | head -1)"
+        warn "Attaching to: ${cname}"
+    else
+        cname="$(echo "$containers" | head -1)"
     fi
 
     info "Attaching to container '${cname}'..."
