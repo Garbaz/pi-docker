@@ -29,6 +29,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fd-find \
     unzip \
     bash-completion \
+    less \
+    vim \
+    nano \
+    procps \
+    openssh-client \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv (fast Python package manager — matches host preference)
@@ -43,6 +49,13 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
+
+# Install git-delta (better diff rendering)
+ARG GIT_DELTA_VERSION=0.18.2
+RUN ARCH=$(dpkg --print-architecture) \
+    && wget -q "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" \
+    && dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" \
+    && rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
 # Install rtk (CLI proxy for LLM token optimization — needed by pi-rtk-optimizer)
 RUN curl -fsSL https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-unknown-linux-musl.tar.gz \
@@ -66,7 +79,9 @@ RUN npm install -g npm@latest \
 ARG HOST_UID=1000
 ARG HOST_GID=1000
 RUN groupadd -g ${HOST_GID} agent \
-    && useradd -m -u ${HOST_UID} -g ${HOST_GID} -s /bin/bash agent
+    && useradd -m -u ${HOST_UID} -g ${HOST_GID} -s /bin/bash agent \
+    && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
+    && chmod 0440 /etc/sudoers.d/agent
 
 # Allow the agent user to install global npm packages without sudo.
 # npm's default prefix (/usr/local) is root-owned. Redirect global installs
@@ -83,8 +98,10 @@ RUN mkdir -p /home/agent/.npm-global /home/agent/.pi/agent \
 USER agent
 WORKDIR /home/agent
 
-# Default environment: use uv for Python
+# Default environment
 ENV UV_PYTHON_PREFERENCE=system
+ENV EDITOR=vim
+ENV VISUAL=vim
 
 # Entry point: Pi (permission system runs in yoloMode via config overlay)
 # No CMD — when pi-docker passes no args, `pi` starts in interactive mode.

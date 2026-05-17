@@ -43,8 +43,8 @@ pi-docker --build
 # 2. Run Pi in the current directory
 pi-docker
 
-# 3. Drop into a shell inside the container
-pi-docker --shell
+# Or: rebuild the image and run in one step
+pi-docker --rebuild
 ```
 
 Pi runs in YOLO mode inside the container — all permission prompts are auto-approved. The container boundary prevents access to anything outside the mounted volumes.
@@ -73,9 +73,13 @@ Any additional arguments are passed to Pi.
 ### Base Image (`pi-base:latest`)
 
 Built from the `Dockerfile`. Contains:
-- Node.js 22 (official slim image)
+- Node.js 22 (official slim image) + npm (latest)
 - Python 3 + [uv](https://docs.astral.sh/uv/)
-- Git, GitHub CLI (`gh`), curl, jq, ripgrep, fd-find
+- Rust toolchain (rustup stable, minimal profile)
+- Git, GitHub CLI (`gh`), git-delta
+- curl, wget, jq, ripgrep, fd-find, vim, nano, less, procps
+- SSH client, sudo (passwordless for agent user)
+- rtk (LLM token optimizer)
 - Pi coding agent (installed globally via npm)
 - Non-root user `agent` matching your host UID/GID
 
