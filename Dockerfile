@@ -44,7 +44,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Pi coding agent globally
+# Install Pi coding agent globally (as root into /usr/local)
 RUN npm install -g @earendil-works/pi-coding-agent
 
 # Create a non-root user matching the host UID/GID for volume mount permissions.
@@ -54,9 +54,14 @@ ARG HOST_GID=1000
 RUN groupadd -g ${HOST_GID} agent \
     && useradd -m -u ${HOST_UID} -g ${HOST_GID} -s /bin/bash agent
 
-# Create config directory (workspace dir is created at runtime by the wrapper)
-RUN mkdir -p /home/agent/.pi/agent \
-    && chown -R agent:agent /home/agent/.pi
+# Allow the agent user to install global npm packages without sudo.
+# npm's default prefix (/usr/local) is root-owned. Redirect global installs
+# to ~/.npm-global which the agent user owns, and add it to PATH so Pi can
+# find globally installed packages (and its own extensions).
+ENV NPM_CONFIG_PREFIX=/home/agent/.npm-global
+ENV PATH="/home/agent/.npm-global/bin:${PATH}"
+RUN mkdir -p /home/agent/.npm-global /home/agent/.pi/agent \
+    && chown -R agent:agent /home/agent/.npm-global /home/agent/.pi
 
 # Switch to non-root user
 # WORKDIR is set at runtime via the wrapper script to /home/agent/<project-name>
