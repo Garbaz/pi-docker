@@ -44,11 +44,13 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade npm to latest to suppress version notices during runtime installs
-RUN npm install -g npm@latest
+# Install rtk (CLI proxy for LLM token optimization — needed by pi-rtk-optimizer)
+RUN curl -fsSL https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-unknown-linux-musl.tar.gz \
+    | tar xz -C /usr/local/bin rtk
 
 # Install Pi coding agent globally (as root into /usr/local)
-RUN npm install -g @earendil-works/pi-coding-agent
+RUN npm install -g npm@latest \
+    && npm install -g @earendil-works/pi-coding-agent
 
 # Create a non-root user matching the host UID/GID for volume mount permissions.
 # Default to 1000:1000; override at build time with --build-arg.
