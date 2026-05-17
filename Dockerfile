@@ -77,12 +77,13 @@ RUN ARCH=$(dpkg --print-architecture) \
 RUN curl -fsSL https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-unknown-linux-musl.tar.gz \
     | tar xz -C /usr/local/bin rtk
 
-# Install Rust toolchain via rustup (stable, minimal profile)
+# Install Rust toolchain via rustup (stable, default profile + extras)
 # CARGO_HOME/RUSTUP_HOME set before install so rustup uses these paths.
 ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-    | sh -s -- -y --no-modify-path --profile minimal \
+    | sh -s -- -y --no-modify-path --profile default \
+    && rustup component add rust-analyzer \
     && chmod -R a+rwX "${CARGO_HOME}" "${RUSTUP_HOME}"
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
