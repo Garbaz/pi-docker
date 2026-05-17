@@ -189,7 +189,11 @@ stop_container() {
     local cname="pi-${slug}"
 
     info "Stopping container ${cname}..."
-    docker stop "${cname}" 2>/dev/null && ok "Stopped ${cname}" || warn "Container ${cname} not running"
+    if docker stop "${cname}" 2>/dev/null; then
+        ok "Stopped ${cname}"
+    else
+        warn "Container ${cname} not running"
+    fi
 }
 
 # --- Clean up ---
@@ -201,10 +205,16 @@ clean() {
     local project_image="pi-${slug}:latest"
 
     info "Cleaning up Pi containers and images for project '${slug}'..."
-    docker rm -f "${cname}" "${cname}-shell" 2>/dev/null || true
+    if ! docker rm -f "${cname}" "${cname}-shell" 2>/dev/null; then
+        true  # containers may not exist, that's fine
+    fi
 
     if docker image inspect "${project_image}" &>/dev/null; then
-        docker rmi "${project_image}" 2>/dev/null && ok "Removed image ${project_image}" || true
+        if ! docker rmi "${project_image}" 2>/dev/null; then
+            warn "Could not remove image ${project_image}"
+        else
+            ok "Removed image ${project_image}"
+        fi
     fi
 
     ok "Clean complete for '${slug}'"
