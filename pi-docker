@@ -174,6 +174,12 @@ run_pi() {
     [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
     [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
 
+    # GPU passthrough (opt-in via --gpus flag)
+    local gpu_args=()
+    if [[ "$gpu_passthrough" -eq 1 ]]; then
+        gpu_args=(--gpus all)
+    fi
+
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
@@ -184,6 +190,7 @@ run_pi() {
     docker run ${tty_flag} --rm \
         --name "${cname}" \
         --init \
+        "${gpu_args[@]+"${gpu_args[@]}"}" \
         -e "HOME=/home/agent" \
         -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
         -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
@@ -237,6 +244,12 @@ run_shell() {
     [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
     [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
 
+    # GPU passthrough (opt-in via --gpus flag)
+    local gpu_args=()
+    if [[ "$gpu_passthrough" -eq 1 ]]; then
+        gpu_args=(--gpus all)
+    fi
+
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
@@ -245,6 +258,7 @@ run_shell() {
 
     docker run ${tty_flag} --rm \
         --name "${cname}" \
+        "${gpu_args[@]+"${gpu_args[@]}"}" \
         -e "HOME=/home/agent" \
         -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
         -e "PI_IN_DOCKER=1" \
@@ -320,6 +334,7 @@ ${BLUE}USAGE${NC}
 ${BLUE}OPTIONS${NC}
   --project DIR    Use DIR as workspace (default: current directory)
   --attach         Attach to a running container for this project
+  --gpus           Pass all NVIDIA GPUs to the container (--gpus all)
   --build          Build or rebuild the base Pi Docker image
   --extend         Build the project-extended image (requires Dockerfile.extend)
   --shell          Drop into a bash shell inside the container
@@ -335,6 +350,12 @@ ${BLUE}MULTIPLE INSTANCES${NC}
     pi-docker --attach     # Join the running container for this project
 
   --stop stops all running containers for the project.
+
+${BLUE}GPU PASSTHROUGH${NC}
+  Pass --gpus to enable NVIDIA GPU access inside the container.
+  Requires the NVIDIA Container Toolkit on the host.
+
+    pi-docker --gpus       # Start Pi with GPU access
 
 ${BLUE}PROJECT EXTENSIONS${NC}
   To add project-specific dependencies:
@@ -372,6 +393,7 @@ EOF
 main() {
     local workspace=""
     local action="run"
+    local gpu_passthrough=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -381,6 +403,10 @@ main() {
                 ;;
             --attach)
                 action="attach"
+                shift
+                ;;
+            --gpus)
+                gpu_passthrough=1
                 shift
                 ;;
             --build)

@@ -6,6 +6,7 @@ Run the [Pi coding agent](https://github.com/earendil-works/pi-coding-agent) in 
 
 - **One command to run**: `pi-docker` builds the image, mounts your project, and starts Pi
 - **YOLO by default**: Permission system runs in `yoloMode` inside the container — no prompts
+- **GPU passthrough**: Opt-in with `--gpus` flag (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/installation-guide.html))
 - **Persistent config**: `~/.pi/agent` is mounted read-write — settings, auth, and sessions persist
 - **Cached extensions**: `~/.pi/docker/npm-global` persists npm packages across runs — fast startup
 - **Project-aware workspace**: Mounts at `/home/agent/<dirname>` so tools see the real project name
