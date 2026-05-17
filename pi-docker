@@ -3,7 +3,7 @@
 # pi-docker — Run Pi coding agent in an isolated Docker container
 # =============================================================================
 # Usage:
-#   pi-docker                          # General session (uses current dir as workspace)
+#   pi-docker                          # Run Pi (attach to existing container if running)
 #   pi-docker --project /path/to/dir   # Specific project directory
 #   pi-docker --build                  # (Re)build the base image first
 #   pi-docker --extend                 # Build project-extended image (from Dockerfile.extend)
@@ -12,8 +12,8 @@
 #   pi-docker --clean                  # Remove container and project image
 #   pi-docker --help                   # Show this help
 #
-# The base image (pi-base:latest) is defined in ~/.pi/docker/Dockerfile.
-# Projects can extend it by placing a Dockerfile.extend in their root.
+# Multiple Pi instances in the same workspace share a container (via docker exec).
+# When the first instance exits, the container is removed — nothing left behind.
 # =============================================================================
 
 set -euo pipefail
@@ -133,7 +133,7 @@ resolve_image() {
     fi
 }
 
-# --- Run Pi container ---
+# --- Run Pi (exec into existing container, or start a new one) ---
 run_pi() {
     local workspace="$1"
     local slug
@@ -146,17 +146,24 @@ run_pi() {
     use_image="$(resolve_image "$workspace")"
     local extra_args=("${@:2}")
 
-    # Build optional mounts (only if host files exist)
-    local opt_mounts=()
-    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
-    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
+    # If container is already running, exec a second Pi into it
+    if docker exec "${cname}" true 2>/dev/null; then
+        info "Attaching to existing container '${cname}'..."
+        docker exec -it "${cname}" pi "${extra_args[@]}"
+        return
+    fi
 
-    # GPU passthrough (only if NVIDIA runtime is available)
+    # Remove any stopped container with the same name
+    docker rm -f "${cname}" &>/dev/null || true
+
+    # Build args
     local gpu_args=()
     if has_nvidia_runtime; then
         gpu_args=(--gpus all)
     fi
-
+    local opt_mounts=()
+    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
+    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
@@ -164,10 +171,12 @@ run_pi() {
     info "Workspace: ${workspace} → ${container_workdir}"
     info "Image: ${use_image}"
 
-    docker run ${tty_flag} --rm \
+    # Start container (no --rm — trap handles cleanup on exit)
+    trap 'docker rm -f "'"${cname}"'" &>/dev/null || true' EXIT
+    docker run ${tty_flag} \
         --name "${cname}" \
         --init \
-        "${gpu_args[@]}" \
+        "${gpu_args[@]+"${gpu_args[@]}"}" \
         -e "HOME=/home/agent" \
         -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
         -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
@@ -177,15 +186,13 @@ run_pi() {
         -v "${workspace}:${container_workdir}" \
         -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
         -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
-        "${opt_mounts[@]}" \
+        "${opt_mounts[@]+"${opt_mounts[@]}"}" \
         -w "${container_workdir}" \
         "${use_image}" \
         "${extra_args[@]}"
 }
 
-
-
-# --- Drop into shell ---
+# --- Drop into shell (exec into existing container, or start a new one) ---
 run_shell() {
     local workspace="$1"
     local slug
@@ -197,32 +204,41 @@ run_shell() {
     local use_image
     use_image="$(resolve_image "$workspace")"
 
-    # Build optional mounts (only if host files exist)
-    local opt_mounts=()
-    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
-    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
+    # If container is already running, exec bash into it
+    if docker exec "${cname}" true 2>/dev/null; then
+        info "Attaching to existing shell container '${cname}'..."
+        docker exec -it "${cname}" /bin/bash
+        return
+    fi
 
-    # GPU passthrough (only if NVIDIA runtime is available)
+    # Remove any stopped container with the same name
+    docker rm -f "${cname}" &>/dev/null || true
+
+    # Build args
     local gpu_args=()
     if has_nvidia_runtime; then
         gpu_args=(--gpus all)
     fi
-
+    local opt_mounts=()
+    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
+    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
     info "Opening shell in Pi container (workspace: ${workspace} → ${container_workdir})..."
 
-    docker run ${tty_flag} --rm \
+    # Start container (no --rm — trap handles cleanup on exit)
+    trap 'docker rm -f "'"${cname}"'" &>/dev/null || true' EXIT
+    docker run ${tty_flag} \
         --name "${cname}" \
-        "${gpu_args[@]}" \
+        "${gpu_args[@]+"${gpu_args[@]}"}" \
         -e "HOME=/home/agent" \
         -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
         -e "PI_IN_DOCKER=1" \
         -v "${workspace}:${container_workdir}" \
         -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
         -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
-        "${opt_mounts[@]}" \
+        "${opt_mounts[@]+"${opt_mounts[@]}"}" \
         -w "${container_workdir}" \
         --entrypoint /bin/bash \
         "${use_image}"
@@ -241,6 +257,8 @@ stop_container() {
     else
         warn "Container ${cname} not running"
     fi
+    # Remove it (since we no longer use --rm)
+    docker rm -f "${cname}" &>/dev/null || true
 }
 
 # --- Clean up ---
@@ -249,12 +267,11 @@ clean() {
     local slug
     slug="$(project_slug "$workspace")"
     local cname="pi-${slug}"
+    local cname_shell="pi-${slug}-shell"
     local project_image="pi-${slug}:latest"
 
     info "Cleaning up Pi containers and images for project '${slug}'..."
-    if ! docker rm -f "${cname}" "${cname}-shell" 2>/dev/null; then
-        true  # containers may not exist, that's fine
-    fi
+    docker rm -f "${cname}" "${cname_shell}" &>/dev/null || true
 
     if docker image inspect "${project_image}" &>/dev/null; then
         if ! docker rmi "${project_image}" 2>/dev/null; then
@@ -280,9 +297,16 @@ ${BLUE}OPTIONS${NC}
   --build          Build or rebuild the base Pi Docker image
   --extend         Build the project-extended image (requires Dockerfile.extend)
   --shell          Drop into a bash shell inside the container
-  --stop           Stop the running container for this project
+  --stop           Stop and remove the running container for this project
   --clean          Remove containers and project-specific image
   --help           Show this help message
+
+${BLUE}MULTIPLE INSTANCES${NC}
+  Running pi-docker in the same workspace while a container is already running
+  will attach to the existing container (via docker exec) instead of creating
+  a new one. All instances share the same container and filesystem.
+
+  When the first instance (the container owner) exits, the container is removed.
 
 ${BLUE}PROJECT EXTENSIONS${NC}
   To add project-specific dependencies:
@@ -339,7 +363,6 @@ main() {
                 action="shell"
                 shift
                 ;;
-
             --stop)
                 action="stop"
                 shift
@@ -376,7 +399,6 @@ main() {
             check_stale_image
             run_pi "${workspace}" "$@"
             ;;
-
         shell)
             check_stale_image
             run_shell "${workspace}"
