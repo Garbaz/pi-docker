@@ -205,6 +205,7 @@ run_pi() {
         -v "${workspace}:${container_workdir}" \
         -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
         -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
+        -v "${HOME}/.pi/docker/npm-global:/home/agent/.npm-global" \
         "${opt_mounts[@]+"${opt_mounts[@]}"}" \
         -w "${container_workdir}" \
         "${use_image}" \
@@ -269,6 +270,7 @@ run_shell() {
         -v "${workspace}:${container_workdir}" \
         -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
         -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
+        -v "${HOME}/.pi/docker/npm-global:/home/agent/.npm-global" \
         "${opt_mounts[@]+"${opt_mounts[@]}"}" \
         -w "${container_workdir}" \
         --entrypoint /bin/bash \
