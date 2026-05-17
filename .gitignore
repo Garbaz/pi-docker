@@ -2,6 +2,7 @@
 agent/
 run/
 tmp/
+npm-global/
 
 # Docker build artifacts
 *.tar
