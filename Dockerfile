@@ -73,5 +73,6 @@ WORKDIR /home/agent
 ENV UV_PYTHON_PREFERENCE=system
 
 # Entry point: Pi (permission system runs in yoloMode via config overlay)
+# No CMD — when pi-docker passes no args, `pi` starts in interactive mode.
+# Args from pi-docker are appended after ENTRYPOINT, overriding any CMD.
 ENTRYPOINT ["pi"]
-CMD ["--help"]
