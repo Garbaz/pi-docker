@@ -56,10 +56,12 @@ pi-docker [OPTIONS] [PI_ARGS...]
 
 Options:
   --project DIR    Use DIR as workspace (default: current directory)
+  --attach         Attach to a running container for this project
+  --gpus           Pass all NVIDIA GPUs to the container
   --build          Build or rebuild the base Pi Docker image
   --extend         Build project-extended image (requires Dockerfile.extend)
   --shell          Drop into a bash shell inside the container
-  --stop           Stop the running container for this project
+  --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
   --help           Show this help message
 
@@ -83,6 +85,7 @@ Built from the `Dockerfile`. Contains:
 |-----------|---------------|------|---------|
 | `~/.pi/agent` | `/home/agent/.pi/agent` | rw | Pi config, settings, auth |
 | `~/.pi/docker/permission-config.json` | `.../pi-permission-system/config.json` | ro | YOLO mode overlay |
+| `~/.pi/docker/npm-global` | `/home/agent/.npm-global` | rw | Cached npm packages (fast startup) |
 | `<project>/` | `/home/agent/<dirname>` | rw | Project source code |
 | `~/.gitconfig` | `/home/agent/.gitconfig` | ro | Git identity (if exists) |
 | `~/.ssh/known_hosts` | `/home/agent/.ssh/known_hosts` | ro | SSH host verification (if exists) |
@@ -134,10 +137,13 @@ Extended images inherit all layers from `pi-base:latest` — only the new layers
 
 ## Tips
 
-- **Multiple projects**: Each project gets its own container name (`pi-<slug>`), so you can run Pi in multiple projects simultaneously
+- **Multiple projects**: Each invocation gets a unique container name (`pi-<slug>-xxxx`), so you can run Pi in multiple projects simultaneously
+- **Attach to a running container**: Use `pi-docker --attach` to join an already running Pi session in the same project
+- **GPU access**: Pass `--gpus` to enable NVIDIA GPU passthrough (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/installation-guide.html))
 - **SSH agent forwarding**: If you need git push access, mount your SSH agent: add `-v $SSH_AUTH_SOCK:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent`
 - **Rebuilding after Pi updates**: Run `pi-docker --build` to pick up the latest Pi version
 - **Custom API keys**: Set them in your shell before running: `OPENAI_API_KEY=sk-... pi-docker`
+- **Stale image warning**: If the Dockerfile changed since your last build, `pi-docker` will warn you to run `--build`
 
 ## File Structure
 
@@ -146,6 +152,7 @@ Extended images inherit all layers from `pi-base:latest` — only the new layers
 ├── Dockerfile                    # Base Pi image
 ├── pi-docker                     # Wrapper script
 ├── permission-config.json        # YOLO mode config overlay
+├── npm-global/                   # Cached npm packages (persisted across runs)
 ├── .dockerignore                 # Keep build context lean
 ├── Dockerfile.extend.template    # Template for per-project extensions
 └── README.md                     # This file

@@ -6,6 +6,7 @@
 #   pi-docker                          # Run Pi in the current directory
 #   pi-docker --project /path/to/dir   # Specific project directory
 #   pi-docker --attach                 # Attach to a running container for this project
+#   pi-docker --gpus                 # Run with NVIDIA GPU passthrough
 #   pi-docker --build                  # (Re)build the base image first
 #   pi-docker --extend                 # Build project-extended image (from Dockerfile.extend)
 #   pi-docker --shell                  # Drop into a shell inside the container
