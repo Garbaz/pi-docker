@@ -7,7 +7,8 @@
 #   pi-docker --project /path/to/dir   # Specific project directory
 #   pi-docker --attach                 # Attach to a running container for this project
 #   pi-docker --gpus                 # Run with NVIDIA GPU passthrough
-#   pi-docker --rebuild              # Rebuild the base image then run Pi
+#   pi-docker --build               # Build image (if needed) then run Pi
+#   pi-docker --rebuild              # Clean rebuild from scratch then run Pi
 #   pi-docker --extend                 # Build project-extended image (from Dockerfile.extend)
 #   pi-docker --shell                  # Drop into a shell inside the container
 #   pi-docker --stop                   # Stop all running containers for this project
@@ -58,8 +59,13 @@ project_mount_name() {
 }
 
 # --- Build base image ---
+# Pass --no-cache for a clean rebuild (ignores all cached layers)
 build_base() {
+    local no_cache=""
+    [[ "${1:-}" == "--no-cache" ]] && no_cache="--no-cache"
+
     docker build \
+        ${no_cache} \
         --build-arg HOST_UID="$(id -u)" \
         --build-arg HOST_GID="$(id -g)" \
         -t "${BASE_IMAGE}" \
@@ -111,7 +117,7 @@ check_stale_image() {
     image_epoch="$(date -d "${image_ctime}" '+%s' 2>/dev/null)" || return
 
     if [[ "${dockerfile_mtime}" -gt "${image_epoch}" ]]; then
-        warn "Dockerfile changed since last build. Run: pi-docker --build"
+        warn "Dockerfile changed since last build. Run: pi-docker --rebuild for a clean rebuild"
     fi
 }
 
@@ -351,8 +357,9 @@ ${BLUE}OPTIONS${NC}
   --project DIR    Use DIR as workspace (default: current directory)
   --attach         Attach to a running container for this project
   --gpus           Pass all NVIDIA GPUs to the container (--gpus all)
-  --rebuild        Rebuild the base image then run Pi
-  --build          Build or rebuild the base Pi Docker image (no run)
+  --build          Build the base image then run Pi
+  --rebuild          Clean rebuild from scratch (no cache) then run Pi
+  --build-only       Build the base image without running Pi
   --extend         Build the project-extended image (requires Dockerfile.extend)
   --shell          Drop into a bash shell inside the container
   --stop           Stop all running containers for this project
@@ -434,6 +441,10 @@ main() {
                 action="build"
                 shift
                 ;;
+            --build-only)
+                action="build"
+                shift
+                ;;
             --extend)
                 action="extend"
                 shift
@@ -475,11 +486,15 @@ main() {
         attach)
             attach_pi "${workspace}" "$@"
             ;;
-        rebuild)
+        build)
             build_base
             run_pi "${workspace}" "$@"
             ;;
-        build)
+        rebuild)
+            build_base --no-cache
+            run_pi "${workspace}" "$@"
+            ;;
+        build-only)
             build_base
             ;;
         extend)

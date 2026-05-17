@@ -37,14 +37,17 @@ export PATH="$HOME/.pi/docker:$PATH"
 ## Quick Start
 
 ```bash
-# 1. Build the base image (one-time, or after changing the Dockerfile)
+# 1. Build the base image and run Pi
 pi-docker --build
 
-# 2. Run Pi in the current directory
-pi-docker
-
-# Or: rebuild the image and run in one step
+# Or: clean rebuild from scratch (no Docker cache) then run
 pi-docker --rebuild
+
+# Just build without running (e.g. for CI)
+pi-docker --build-only
+
+# Run Pi in the current directory (after initial build)
+pi-docker
 ```
 
 Pi runs in YOLO mode inside the container — all permission prompts are auto-approved. The container boundary prevents access to anything outside the mounted volumes.
