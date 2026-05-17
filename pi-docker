@@ -125,6 +125,11 @@ run_pi() {
     use_image="$(resolve_image "$workspace")"
     local extra_args=("${@:2}")
 
+    # Build optional mounts (only if host files exist)
+    local opt_mounts=()
+    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
+    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
+
     info "Starting Pi in container '${cname}'..."
     info "Workspace: ${workspace} → ${container_workdir}"
     info "Image: ${use_image}"
@@ -142,8 +147,7 @@ run_pi() {
         -v "${workspace}:${container_workdir}" \
         -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
         -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
-        -v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro" \
-        -v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro" \
+        "${opt_mounts[@]}" \
         -w "${container_workdir}" \
         "${use_image}" \
         "${extra_args[@]}"
@@ -163,6 +167,11 @@ run_shell() {
     local use_image
     use_image="$(resolve_image "$workspace")"
 
+    # Build optional mounts (only if host files exist)
+    local opt_mounts=()
+    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
+    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
+
     info "Opening shell in Pi container (workspace: ${workspace} → ${container_workdir})..."
 
     docker run -it --rm \
@@ -174,8 +183,7 @@ run_shell() {
         -v "${workspace}:${container_workdir}" \
         -v "${HOME}/.pi/agent:/home/agent/.pi/agent" \
         -v "${PI_DOCKER_DIR}/permission-config.json:/home/agent/.pi/agent/extensions/pi-permission-system/config.json:ro" \
-        -v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro" \
-        -v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro" \
+        "${opt_mounts[@]}" \
         -w "${container_workdir}" \
         --entrypoint /bin/bash \
         "${use_image}"
