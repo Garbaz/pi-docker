@@ -74,7 +74,7 @@ Any additional arguments are passed to Pi.
 
 Built from the `Dockerfile`. Contains:
 - Node.js 22 (official slim image) + npm (latest)
-- Python 3 + [uv](https://docs.astral.sh/uv/)
+- Python 3 + pip + [uv](https://docs.astral.sh/uv/) + [ruff](https://docs.astral.sh/ruff/)
 - Rust toolchain (rustup stable, minimal profile)
 - Git, GitHub CLI (`gh`), git-delta
 - curl, wget, jq, ripgrep, fd (symlinked from `fd-find`), vim, nano, less, procps

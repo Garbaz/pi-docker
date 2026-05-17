@@ -42,7 +42,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # fd-find installs as 'fdfind' — symlink to 'fd' so agents find it by the expected name
-RUN ln -s /usr/bin/fdfind /usr/local/bin/fd
+# python3 is the binary — symlink 'python' so agents find it without the 3 suffix
+RUN ln -s /usr/bin/fdfind /usr/local/bin/fd \
+    && ln -s /usr/bin/python3 /usr/local/bin/python
 
 # Set up UTF-8 locale (many tools break without it)
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
@@ -50,6 +52,9 @@ ENV LANG=en_US.UTF-8
 
 # Install uv (fast Python package manager — matches host preference)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Install ruff (fast Python linter/formatter) — same publisher as uv
+COPY --from=ghcr.io/astral-sh/ruff:latest /ruff /usr/local/bin/ruff
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
