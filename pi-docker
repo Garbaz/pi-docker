@@ -3,17 +3,18 @@
 # pi-docker — Run Pi coding agent in an isolated Docker container
 # =============================================================================
 # Usage:
-#   pi-docker                          # Run Pi (attach to existing container if running)
+#   pi-docker                          # Run Pi in the current directory
 #   pi-docker --project /path/to/dir   # Specific project directory
+#   pi-docker --attach                 # Attach to a running container for this project
 #   pi-docker --build                  # (Re)build the base image first
 #   pi-docker --extend                 # Build project-extended image (from Dockerfile.extend)
 #   pi-docker --shell                  # Drop into a shell inside the container
-#   pi-docker --stop                   # Stop running container
-#   pi-docker --clean                  # Remove container and project image
+#   pi-docker --stop                   # Stop all running containers for this project
+#   pi-docker --clean                  # Remove containers and project image
 #   pi-docker --help                   # Show this help
 #
-# Multiple Pi instances in the same workspace share a container (via docker exec).
-# When the first instance exits, the container is removed — nothing left behind.
+# Each invocation creates its own container (removed automatically on exit).
+# Use --attach to join an already running container instead of creating a new one.
 # =============================================================================
 
 set -euo pipefail
@@ -133,7 +134,33 @@ resolve_image() {
     fi
 }
 
-# --- Run Pi (exec into existing container, or start a new one) ---
+# --- Generate a unique container name (retries if colliding) ---
+container_name() {
+    local slug="$1"
+    local cname
+    local attempts=0
+    while [[ $attempts -lt 5 ]]; do
+        local suffix
+        suffix="$(head -c 4 /dev/urandom | xxd -p)"
+        cname="pi-${slug}-${suffix}"
+        # Verify name is not taken by any container (running or stopped)
+        if ! docker ps -aq --filter "name=${cname}" 2>/dev/null | grep -q .; then
+            echo "${cname}"
+            return
+        fi
+        attempts=$((attempts + 1))
+    done
+    error "Could not find a unique container name after 5 attempts"
+    exit 1
+}
+
+# --- Find a running container for a project (returns name or empty) ---
+find_running_container() {
+    local slug="$1"
+    docker ps --filter "name=pi-${slug}-" --format '{{.Names}}' 2>/dev/null | head -1
+}
+
+# --- Run Pi container ---
 run_pi() {
     local workspace="$1"
     local slug
@@ -141,29 +168,23 @@ run_pi() {
     local mount_name
     mount_name="$(project_mount_name "$workspace")"
     local container_workdir="/home/agent/${mount_name}"
-    local cname="pi-${slug}"
+    local cname
+    cname="$(container_name "$slug")"
     local use_image
     use_image="$(resolve_image "$workspace")"
     local extra_args=("${@:2}")
 
-    # If container is already running, exec a second Pi into it
-    if docker exec "${cname}" true 2>/dev/null; then
-        info "Attaching to existing container '${cname}'..."
-        docker exec -it "${cname}" pi "${extra_args[@]}"
-        return
-    fi
+    # Build optional mounts (only if host files exist)
+    local opt_mounts=()
+    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
+    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
 
-    # Remove any stopped container with the same name
-    docker rm -f "${cname}" &>/dev/null || true
-
-    # Build args
+    # GPU passthrough (only if NVIDIA runtime is available)
     local gpu_args=()
     if has_nvidia_runtime; then
         gpu_args=(--gpus all)
     fi
-    local opt_mounts=()
-    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
-    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
+
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
@@ -171,9 +192,7 @@ run_pi() {
     info "Workspace: ${workspace} → ${container_workdir}"
     info "Image: ${use_image}"
 
-    # Start container (no --rm — trap handles cleanup on exit)
-    trap 'docker rm -f "'"${cname}"'" &>/dev/null || true' EXIT
-    docker run ${tty_flag} \
+    docker run ${tty_flag} --rm \
         --name "${cname}" \
         --init \
         "${gpu_args[@]+"${gpu_args[@]}"}" \
@@ -192,7 +211,26 @@ run_pi() {
         "${extra_args[@]}"
 }
 
-# --- Drop into shell (exec into existing container, or start a new one) ---
+# --- Attach to a running container (exec a second Pi into it) ---
+attach_pi() {
+    local workspace="$1"
+    local slug
+    slug="$(project_slug "$workspace")"
+    local extra_args=("${@:2}")
+
+    local cname
+    cname="$(find_running_container "$slug")"
+    if [[ -z "$cname" ]]; then
+        error "No running container for project '${slug}'"
+        error "Start one first: pi-docker"
+        exit 1
+    fi
+
+    info "Attaching to container '${cname}'..."
+    docker exec -it "${cname}" pi "${extra_args[@]}"
+}
+
+# --- Drop into shell ---
 run_shell() {
     local workspace="$1"
     local slug
@@ -200,36 +238,29 @@ run_shell() {
     local mount_name
     mount_name="$(project_mount_name "$workspace")"
     local container_workdir="/home/agent/${mount_name}"
-    local cname="pi-${slug}-shell"
+    local cname
+    cname="$(container_name "$slug")"
     local use_image
     use_image="$(resolve_image "$workspace")"
 
-    # If container is already running, exec bash into it
-    if docker exec "${cname}" true 2>/dev/null; then
-        info "Attaching to existing shell container '${cname}'..."
-        docker exec -it "${cname}" /bin/bash
-        return
-    fi
+    # Build optional mounts (only if host files exist)
+    local opt_mounts=()
+    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
+    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
 
-    # Remove any stopped container with the same name
-    docker rm -f "${cname}" &>/dev/null || true
-
-    # Build args
+    # GPU passthrough (only if NVIDIA runtime is available)
     local gpu_args=()
     if has_nvidia_runtime; then
         gpu_args=(--gpus all)
     fi
-    local opt_mounts=()
-    [[ -f "${HOME}/.gitconfig" ]] && opt_mounts+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
-    [[ -f "${HOME}/.ssh/known_hosts" ]] && opt_mounts+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
+
     local tty_flag="-it"
     [[ ! -t 0 ]] && tty_flag="-i"
 
-    info "Opening shell in Pi container (workspace: ${workspace} → ${container_workdir})..."
+    info "Opening shell in Pi container '${cname}'..."
+    info "Workspace: ${workspace} → ${container_workdir}"
 
-    # Start container (no --rm — trap handles cleanup on exit)
-    trap 'docker rm -f "'"${cname}"'" &>/dev/null || true' EXIT
-    docker run ${tty_flag} \
+    docker run ${tty_flag} --rm \
         --name "${cname}" \
         "${gpu_args[@]+"${gpu_args[@]}"}" \
         -e "HOME=/home/agent" \
@@ -244,21 +275,28 @@ run_shell() {
         "${use_image}"
 }
 
-# --- Stop container ---
+# --- Stop all containers for a project ---
 stop_container() {
     local workspace="$1"
     local slug
     slug="$(project_slug "$workspace")"
-    local cname="pi-${slug}"
 
-    info "Stopping container ${cname}..."
-    if docker stop "${cname}" 2>/dev/null; then
-        ok "Stopped ${cname}"
-    else
-        warn "Container ${cname} not running"
+    local containers
+    containers="$(docker ps --filter "name=pi-${slug}-" --format '{{.Names}}' 2>/dev/null)" || true
+
+    if [[ -z "${containers}" ]]; then
+        warn "No running containers for project '${slug}'"
+        return
     fi
-    # Remove it (since we no longer use --rm)
-    docker rm -f "${cname}" &>/dev/null || true
+
+    for cname in ${containers}; do
+        info "Stopping ${cname}..."
+        if docker stop "${cname}" 2>/dev/null; then
+            ok "Stopped ${cname}"
+        else
+            warn "Could not stop ${cname}"
+        fi
+    done
 }
 
 # --- Clean up ---
@@ -266,12 +304,16 @@ clean() {
     local workspace="$1"
     local slug
     slug="$(project_slug "$workspace")"
-    local cname="pi-${slug}"
-    local cname_shell="pi-${slug}-shell"
     local project_image="pi-${slug}:latest"
 
     info "Cleaning up Pi containers and images for project '${slug}'..."
-    docker rm -f "${cname}" "${cname_shell}" &>/dev/null || true
+
+    # Remove any containers (running or stopped)
+    local containers
+    containers="$(docker ps -a --filter "name=pi-${slug}-" --format '{{.Names}}' 2>/dev/null)" || true
+    for cname in ${containers}; do
+        docker rm -f "${cname}" &>/dev/null || true
+    done
 
     if docker image inspect "${project_image}" &>/dev/null; then
         if ! docker rmi "${project_image}" 2>/dev/null; then
@@ -294,19 +336,22 @@ ${BLUE}USAGE${NC}
 
 ${BLUE}OPTIONS${NC}
   --project DIR    Use DIR as workspace (default: current directory)
+  --attach         Attach to a running container for this project
   --build          Build or rebuild the base Pi Docker image
   --extend         Build the project-extended image (requires Dockerfile.extend)
   --shell          Drop into a bash shell inside the container
-  --stop           Stop and remove the running container for this project
+  --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
   --help           Show this help message
 
 ${BLUE}MULTIPLE INSTANCES${NC}
-  Running pi-docker in the same workspace while a container is already running
-  will attach to the existing container (via docker exec) instead of creating
-  a new one. All instances share the same container and filesystem.
+  Each pi-docker invocation creates its own container (removed on exit).
+  To join an already running container instead, use --attach:
 
-  When the first instance (the container owner) exits, the container is removed.
+    pi-docker              # Start a new Pi session
+    pi-docker --attach     # Join the running container for this project
+
+  --stop stops all running containers for the project.
 
 ${BLUE}PROJECT EXTENSIONS${NC}
   To add project-specific dependencies:
@@ -332,10 +377,10 @@ ${BLUE}ENVIRONMENT VARIABLES${NC}
   GITHUB_TOKEN        Passed through to the container
 
 ${BLUE}FILES${NC}
-  ~/.pi/docker/Dockerfile                Base Pi image definition
+  ~/.pi/docker/Dockerfile                  Base Pi image definition
   ~/.pi/docker/Dockerfile.extend.template  Template for project extensions
-  ~/.pi/docker/permission-config.json    YOLO mode config for the container
-  ./Dockerfile.extend                    Project-specific image extensions
+  ~/.pi/docker/permission-config.json      YOLO mode config for the container
+  ./Dockerfile.extend                      Project-specific image extensions
 
 EOF
 }
@@ -350,6 +395,10 @@ main() {
             --project)
                 workspace="$2"
                 shift 2
+                ;;
+            --attach)
+                action="attach"
+                shift
                 ;;
             --build)
                 action="build"
@@ -389,15 +438,18 @@ main() {
     workspace="$(resolve_workspace "${workspace:-$(pwd)}")"
 
     case "${action}" in
+        run)
+            check_stale_image
+            run_pi "${workspace}" "$@"
+            ;;
+        attach)
+            attach_pi "${workspace}" "$@"
+            ;;
         build)
             build_base
             ;;
         extend)
             build_extended "${workspace}"
-            ;;
-        run)
-            check_stale_image
-            run_pi "${workspace}" "$@"
             ;;
         shell)
             check_stale_image
