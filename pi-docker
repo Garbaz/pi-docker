@@ -141,11 +141,14 @@ run_pi() {
         gpu_args=(--gpus all)
     fi
 
+    local tty_flag="-it"
+    [[ ! -t 0 ]] && tty_flag="-i"
+
     info "Starting Pi in container '${cname}'..."
     info "Workspace: ${workspace} → ${container_workdir}"
     info "Image: ${use_image}"
 
-    docker run -it --rm \
+    docker run ${tty_flag} --rm \
         --name "${cname}" \
         --init \
         "${gpu_args[@]}" \
@@ -189,9 +192,12 @@ run_shell() {
         gpu_args=(--gpus all)
     fi
 
+    local tty_flag="-it"
+    [[ ! -t 0 ]] && tty_flag="-i"
+
     info "Opening shell in Pi container (workspace: ${workspace} → ${container_workdir})..."
 
-    docker run -it --rm \
+    docker run ${tty_flag} --rm \
         --name "${cname}" \
         "${gpu_args[@]}" \
         -e "HOME=/home/agent" \
