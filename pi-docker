@@ -10,7 +10,7 @@
 #   pi-docker --host-net               # Use host network (container sees localhost)
 #   pi-docker --build                  # Build image then run Pi
 #   pi-docker --rebuild                # Clean rebuild from scratch then run Pi
-#   pi-docker --extend                 # Build project-extended image (from Dockerfile.extend)
+#   pi-docker --extend                 # Build project-extended image (from .pi-dockerfile)
 #   pi-docker --shell                  # Drop into a shell inside the container
 #   pi-docker --stop                   # Stop all running containers for this project
 #   pi-docker --clean                  # Remove containers and project image
@@ -204,12 +204,12 @@ build_extended() {
     local workspace="$1"
     local slug
     slug="$(project_slug "$workspace")"
-    local extend_file="${workspace}/Dockerfile.extend"
+    local extend_file="${workspace}/.pi-dockerfile"
     local project_image="pi-${slug}:latest"
 
     if [[ ! -f "$extend_file" ]]; then
-        warn "No Dockerfile.extend found in ${workspace}"
-        warn "Copy the template: cp ${PI_DOCKER_DIR}/Dockerfile.extend.template ${workspace}/Dockerfile.extend"
+        warn "No .pi-dockerfile found in ${workspace}"
+        warn "Copy the template: cp ${PI_DOCKER_DIR}/.pi-dockerfile.template ${workspace}/.pi-dockerfile"
         info "Falling back to base image ${BASE_IMAGE}"
         return
     fi
@@ -490,7 +490,7 @@ ${BLUE}OPTIONS${NC}
   --build          Build the base image then run Pi
   --rebuild        Clean rebuild from scratch (no cache) then run Pi
   --build-only     Build the base image without running Pi
-  --extend         Build the project-extended image (requires Dockerfile.extend)
+  --extend         Build the project-extended image (requires .pi-dockerfile)
   --shell          Drop into a bash shell inside the container
   --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
@@ -524,9 +524,9 @@ ${BLUE}PROJECT EXTENSIONS${NC}
   To add project-specific dependencies:
 
   1. Copy the template:
-     cp ~/.pi/docker/Dockerfile.extend.template ./Dockerfile.extend
+     cp ~/.pi/docker/.pi-dockerfile.template ./.pi-dockerfile
 
-  2. Edit Dockerfile.extend (it starts FROM pi-base:latest):
+  2. Edit .pi-dockerfile (it starts FROM pi-base:latest):
      RUN apt-get update && apt-get install -y libpq-dev
      RUN uv pip install --system numpy pandas
 
@@ -544,9 +544,9 @@ ${BLUE}ENVIRONMENT VARIABLES${NC}
 
 ${BLUE}FILES${NC}
   ~/.pi/docker/Dockerfile                  Base Pi image definition
-  ~/.pi/docker/Dockerfile.extend.template  Template for project extensions
+  ~/.pi/docker/.pi-dockerfile.template  Template for project extensions
   ~/.pi/docker/permission-config.json      YOLO mode config for the container
-  ./Dockerfile.extend                      Project-specific image extensions
+  ./.pi-dockerfile                      Project-specific image extensions
 
 EOF
 }

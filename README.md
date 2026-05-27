@@ -10,7 +10,7 @@ Run the [Pi coding agent](https://github.com/earendil-works/pi-coding-agent) in 
 - **Persistent config**: `~/.pi/agent` is mounted read-write — settings, auth, and sessions persist
 - **Cached extensions**: `~/.pi/docker/npm-global` persists npm packages across runs — fast startup
 - **Project-aware workspace**: Mounts at `/home/agent/<dirname>` so tools see the real project name
-- **Per-project extensions**: Add project-specific deps via `Dockerfile.extend` (inherits from base)
+- **Per-project extensions**: Add project-specific deps via `.pi-dockerfile` (inherits from base)
 - **Auto-mount paths**: File paths in forwarded arguments (e.g. `--extension /path/to/ext`) are auto-detected and mounted into the container
 - **Non-root container**: Matches your host UID/GID so volume mounts work correctly
 
@@ -63,7 +63,7 @@ Options:
   --attach         Attach to a running container for this project
   --gpus           Pass all NVIDIA GPUs to the container
   --build          Build or rebuild the base Pi Docker image
-  --extend         Build project-extended image (requires Dockerfile.extend)
+  --extend         Build project-extended image (requires .pi-dockerfile)
   --shell          Drop into a bash shell inside the container
   --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
@@ -136,11 +136,11 @@ A minimal `permission-config.json` with `{ "yoloMode": true }` is mounted over t
 
 ## Project Extensions
 
-Add project-specific dependencies by creating a `Dockerfile.extend` in your project root:
+Add project-specific dependencies by creating a `.pi-dockerfile` in your project root:
 
 ```bash
 # 1. Copy the template
-cp ~/.pi/docker/Dockerfile.extend.template ./Dockerfile.extend
+cp ~/.pi/docker/.pi-dockerfile.template ./.pi-dockerfile
 
 # 2. Edit it — add whatever you need
 #    FROM pi-base:latest
@@ -187,9 +187,9 @@ Extended images inherit all layers from `pi-base:latest` — only the new layers
 ├── permission-config.json        # YOLO mode config overlay
 ├── npm-global/                   # Cached npm packages (persisted across runs)
 ├── .dockerignore                 # Keep build context lean
-├── Dockerfile.extend.template    # Template for per-project extensions
+├── .pi-dockerfile.template    # Template for per-project extensions
 └── README.md                     # This file
 
 Per-project (in project root):
-└── Dockerfile.extend             # Project-specific packages (FROM pi-base:latest)
+└── .pi-dockerfile             # Project-specific packages (FROM pi-base:latest)
 ```

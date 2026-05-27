@@ -1,10 +1,10 @@
 # =============================================================================
-# Pi Docker Isolation — Dockerfile.extend Template
+# Pi Docker Isolation — .pi-dockerfile Template
 # =============================================================================
-# Place this in your project root as Dockerfile.extend and customize it.
+# Place this in your project root as .pi-dockerfile and customize it.
 # It inherits everything from the pi-base image (Node, Python, uv, git, gh, pi).
 #
-# Build:  docker build -t pi-<project>:latest -f Dockerfile.extend .
+# Build:  docker build -t pi-<project>:latest -f .pi-dockerfile .
 # =============================================================================
 
 FROM pi-base:latest
