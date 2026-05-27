@@ -95,7 +95,7 @@ RUN npm install -g npm@latest \
 # to ~/.npm-global which the agent user owns, and add it to PATH so Pi can
 # find globally installed packages (and its own extensions).
 ENV NPM_CONFIG_PREFIX=/home/agent/.npm-global
-ENV NODE_PATH="/home/agent/.npm-global/lib/node_modules"
+ENV NODE_PATH="/home/agent/.npm-global/lib/node_modules:/usr/local/lib/node_modules"
 ENV PATH="/home/agent/.npm-global/bin:${PATH}"
 RUN mkdir -p /home/agent/.npm-global /home/agent/.pi/agent \
     && chown -R agent:agent /home/agent/.npm-global /home/agent/.pi

@@ -14,11 +14,15 @@
 
 FROM pi-base:latest
 
-# ---- Root: system packages, Python dependencies, etc. ----
+# ---- Root: system packages, Python dependencies, npm packages ----
+# Install as root to /usr/local — survives the npm-global bind mount which
+# overrides /home/agent/.npm-global at runtime.
 USER root
 # RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev \
 #     && rm -rf /var/lib/apt/lists/*
+# RUN NPM_CONFIG_PREFIX=/usr/local npm install -g pino
 
-# ---- Agent: user-level packages (npm, pip --user, cargo, etc.) ----
+# ---- Agent: user-level packages installed at runtime ----
+# These persist via the ~/.pi/docker/npm-global bind mount.
 USER agent
-# RUN npm install -g pino
+# RUN npm install -g some-package
