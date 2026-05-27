@@ -91,10 +91,11 @@ RUN npm install -g npm@latest \
     && npm install -g @earendil-works/pi-coding-agent
 
 # Allow the agent user to install global npm packages without sudo.
-# npm's default prefix (/usr/local) is root-owned. Redirect global installs
-# to ~/.npm-global which the agent user owns, and add it to PATH so Pi can
-# find globally installed packages (and its own extensions).
-ENV NPM_CONFIG_PREFIX=/home/agent/.npm-global
+# npm's default prefix (/usr/local) is root-owned.  ~/.npmrc redirects
+# global installs to ~/.npm-global, which the agent owns and is bind-mounted
+# from the host for persistence.  PATH and NODE_PATH include both locations
+# so packages installed by root during build (system) and by agent at
+# runtime (user) are both resolvable.
 ENV NODE_PATH="/home/agent/.npm-global/lib/node_modules:/usr/local/lib/node_modules"
 ENV PATH="/home/agent/.npm-global/bin:${PATH}"
 RUN mkdir -p /home/agent/.npm-global /home/agent/.pi/agent \
@@ -103,6 +104,9 @@ RUN mkdir -p /home/agent/.npm-global /home/agent/.pi/agent \
 # Switch to non-root user for everything below (and at runtime)
 USER agent
 WORKDIR /home/agent
+
+# Per-user npm prefix (so root installs go to /usr/local, agent to ~/.npm-global)
+RUN echo 'prefix = /home/agent/.npm-global' > ~/.npmrc
 
 # Install Rust toolchain via rustup (stable, minimal profile + extras).
 # Installed into the agent user's home — the normal location on a Linux system.
