@@ -47,10 +47,9 @@ declare -a REWRITTEN_ARGS=()
 declare -A MOUNTED_PATHS  # dedup: resolved host path -> container path
 MOUNT_COUNTER=0
 
-# Check if an arg looks like a path that exists outside the workspace
-_is_external_path() {
+# Check if an arg looks like a path that exists on the host
+_is_host_path() {
     local arg="$1"
-    local workspace="$2"
 
     # Must look like a path (absolute, relative, or home-relative)
     [[ "$arg" =~ ^(/|\.\.?/|~) ]] || return 1
@@ -59,14 +58,8 @@ _is_external_path() {
     local expanded
     expanded="$(_expand_tilde "$arg")"
 
-    local resolved
-    resolved="$(realpath -e "$expanded" 2>/dev/null)" || return 1
-
-    # Skip paths inside the workspace (already mounted)
-    [[ "$resolved" != "$workspace"/* ]] || return 1
-
-    # Skip paths inside ~/.pi (already mounted)
-    [[ "$resolved" != "$HOME/.pi"/* ]] || return 1
+    # Must resolve to an existing path
+    realpath -e "$expanded" &>/dev/null || return 1
 
     return 0
 }
@@ -87,7 +80,6 @@ _expand_tilde() {
 # Mount a single path into the container. Sets CONTAINER_PATH global.
 _mount_single_path() {
     local path_arg="$1"
-    local workspace="$2"
     CONTAINER_PATH="$path_arg"  # default: unchanged
 
     # Expand ~
@@ -96,10 +88,6 @@ _mount_single_path() {
 
     local resolved
     resolved="$(realpath -e "$expanded" 2>/dev/null)" || return
-
-    # Skip if inside workspace or ~/.pi (already mounted)
-    [[ "$resolved" != "$workspace"/* ]] || return
-    [[ "$resolved" != "$HOME/.pi"/* ]] || return
 
     # Dedup: reuse existing mount
     if [[ -n "${MOUNTED_PATHS[$resolved]:-}" ]]; then
@@ -155,20 +143,20 @@ resolve_extra_mounts() {
             REWRITTEN_ARGS+=("$arg")
             i=$((i + 1))
             local path_arg="${args[$i]}"
-            _mount_single_path "$path_arg" "$workspace"
+            _mount_single_path "$path_arg"
             REWRITTEN_ARGS+=("$CONTAINER_PATH")
         # Handle @file references: @/path, @./relpath, @~/path
         elif [[ "$arg" =~ ^@(/|\.\.?/|~) ]]; then
             local file_part="${arg#@}"
-            if _is_external_path "$file_part" "$workspace"; then
-                _mount_single_path "$file_part" "$workspace"
+            if _is_host_path "$file_part"; then
+                _mount_single_path "$file_part"
                 REWRITTEN_ARGS+=("@${CONTAINER_PATH}")
             else
                 REWRITTEN_ARGS+=("$arg")
             fi
         # Generic: standalone arg that looks like a path?
-        elif _is_external_path "$arg" "$workspace"; then
-            _mount_single_path "$arg" "$workspace"
+        elif _is_host_path "$arg"; then
+            _mount_single_path "$arg"
             REWRITTEN_ARGS+=("$CONTAINER_PATH")
         else
             REWRITTEN_ARGS+=("$arg")

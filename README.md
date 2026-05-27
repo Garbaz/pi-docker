@@ -80,7 +80,7 @@ When `pi-docker` forwards arguments to `pi`, it automatically detects file and d
 - `@file` references: `pi-docker @~/docs/instructions.md "What does this say?"`
 - Standalone paths: `pi-docker /some/script.py "Explain this"`
 
-**Mount scheme:** Each detected path is mounted at `/mnt/pi-args/<n>/<basename>` inside the container, and the argument is rewritten to point to that container path. Paths already inside the project workspace or `~/.pi` are skipped (they're already mounted). Duplicate paths reuse the same mount.
+**Mount scheme:** Each detected path is mounted at `/mnt/pi-args/<n>/<basename>` inside the container, and the argument is rewritten to point to that container path. This works even for paths inside the project workspace — Docker handles overlapping mounts gracefully. Duplicate paths reuse the same mount.
 
 ```bash
 # Load an extension from outside the workspace — auto-mounted
