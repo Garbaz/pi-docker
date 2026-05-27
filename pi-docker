@@ -38,6 +38,145 @@ warn()  { echo -e "${YELLOW}[pi-docker]${NC} $*"; }
 error() { echo -e "${RED}[pi-docker]${NC} $*" >&2; }
 ok()    { echo -e "${GREEN}[pi-docker]${NC} $*"; }
 
+# --- Auto-mount extra paths ---
+# Scans remaining args for file/directory paths and mounts them into the container.
+# Sets global arrays: EXTRA_MOUNTS (volume args), REWRITTEN_ARGS (modified args)
+
+declare -a EXTRA_MOUNTS=()
+declare -a REWRITTEN_ARGS=()
+declare -A MOUNTED_PATHS  # dedup: resolved host path -> container path
+MOUNT_COUNTER=0
+
+# Check if an arg looks like a path that exists outside the workspace
+_is_external_path() {
+    local arg="$1"
+    local workspace="$2"
+
+    # Must look like a path (absolute, relative, or home-relative)
+    [[ "$arg" =~ ^(/|\.\.?/|~) ]] || return 1
+
+    # Expand ~ if present
+    local expanded
+    expanded="$(_expand_tilde "$arg")"
+
+    local resolved
+    resolved="$(realpath -e "$expanded" 2>/dev/null)" || return 1
+
+    # Skip paths inside the workspace (already mounted)
+    [[ "$resolved" != "$workspace"/* ]] || return 1
+
+    # Skip paths inside ~/.pi (already mounted)
+    [[ "$resolved" != "$HOME/.pi"/* ]] || return 1
+
+    return 0
+}
+
+# Safely expand ~ and ~/ in a path argument (no eval).
+# ~user/foo is not expanded — realpath will reject it and we fall through.
+_expand_tilde() {
+    local arg="$1"
+    if [[ "$arg" == \~ ]]; then
+        echo "$HOME"
+    elif [[ "$arg" == \~/* ]]; then
+        echo "$HOME/${arg#\~/}"
+    else
+        echo "$arg"
+    fi
+}
+
+# Mount a single path into the container. Sets CONTAINER_PATH global.
+_mount_single_path() {
+    local path_arg="$1"
+    local workspace="$2"
+    CONTAINER_PATH="$path_arg"  # default: unchanged
+
+    # Expand ~
+    local expanded
+    expanded="$(_expand_tilde "$path_arg")"
+
+    local resolved
+    resolved="$(realpath -e "$expanded" 2>/dev/null)" || return
+
+    # Skip if inside workspace or ~/.pi (already mounted)
+    [[ "$resolved" != "$workspace"/* ]] || return
+    [[ "$resolved" != "$HOME/.pi"/* ]] || return
+
+    # Dedup: reuse existing mount
+    if [[ -n "${MOUNTED_PATHS[$resolved]:-}" ]]; then
+        CONTAINER_PATH="${MOUNTED_PATHS[$resolved]}"
+        return
+    fi
+
+    # Create mount
+    local basename
+    basename="$(basename "$resolved")"
+    local container_mount="/mnt/pi-args/${MOUNT_COUNTER}/${basename}"
+    CONTAINER_PATH="$container_mount"
+
+    EXTRA_MOUNTS+=(-v "${resolved}:${container_mount}")
+    MOUNTED_PATHS["$resolved"]="$container_mount"
+    MOUNT_COUNTER=$((MOUNT_COUNTER + 1))
+
+    info "Auto-mount: ${resolved} → ${container_mount}"
+}
+
+# Flags known to take a path argument (value is the next arg).
+# Associative array for O(1) lookup — any key set means "takes a path value".
+declare -A _PATH_FLAG=(
+    ["--extension"]=1 ["-e"]=1
+    ["--skill"]=1
+    ["--prompt-template"]=1
+    ["--theme"]=1
+    ["--session"]=1
+    ["--fork"]=1
+    ["--session-dir"]=1
+    ["--export"]=1
+    ["--system-prompt"]=1
+    ["--append-system-prompt"]=1
+)
+
+# Main entry point: scan args, populate EXTRA_MOUNTS and REWRITTEN_ARGS
+resolve_extra_mounts() {
+    local workspace="$1"
+    shift
+    local args=("$@")
+
+    EXTRA_MOUNTS=()
+    REWRITTEN_ARGS=()
+    MOUNTED_PATHS=()
+    MOUNT_COUNTER=0
+
+    local i=0
+    while [[ $i -lt ${#args[@]} ]]; do
+        local arg="${args[$i]}"
+
+        # Flag-aware: if this is a path-taking flag, mount the next arg
+        if [[ -n "${_PATH_FLAG[$arg]:-}" ]] && [[ $((i + 1)) -lt ${#args[@]} ]]; then
+            REWRITTEN_ARGS+=("$arg")
+            i=$((i + 1))
+            local path_arg="${args[$i]}"
+            _mount_single_path "$path_arg" "$workspace"
+            REWRITTEN_ARGS+=("$CONTAINER_PATH")
+        # Handle @file references: @/path, @./relpath, @~/path
+        elif [[ "$arg" =~ ^@(/|\.\.?/|~) ]]; then
+            local file_part="${arg#@}"
+            if _is_external_path "$file_part" "$workspace"; then
+                _mount_single_path "$file_part" "$workspace"
+                REWRITTEN_ARGS+=("@${CONTAINER_PATH}")
+            else
+                REWRITTEN_ARGS+=("$arg")
+            fi
+        # Generic: standalone arg that looks like a path?
+        elif _is_external_path "$arg" "$workspace"; then
+            _mount_single_path "$arg" "$workspace"
+            REWRITTEN_ARGS+=("$CONTAINER_PATH")
+        else
+            REWRITTEN_ARGS+=("$arg")
+        fi
+        i=$((i + 1))
+    done
+}
+
 # --- Resolve workspace ---
 resolve_workspace() {
     local ws="${1:-$(pwd)}"
@@ -212,6 +351,11 @@ build_docker_args() {
         -v "${HOME}/.pi/docker/npm-global:/home/agent/.npm-global"
     )
 
+    # Extra mounts for paths detected in forwarded args
+    if [[ ${#EXTRA_MOUNTS[@]} -gt 0 ]]; then
+        DOCKER_ARGS+=("${EXTRA_MOUNTS[@]}")
+    fi
+
     # Optional mounts (only if host files exist)
     [[ -f "${HOME}/.gitconfig" ]] && DOCKER_ARGS+=(-v "${HOME}/.gitconfig:/home/agent/.gitconfig:ro")
     [[ -f "${HOME}/.ssh/known_hosts" ]] && DOCKER_ARGS+=(-v "${HOME}/.ssh/known_hosts:/home/agent/.ssh/known_hosts:ro")
@@ -230,6 +374,10 @@ build_docker_args() {
 run_pi() {
     local workspace="$1"
     local extra_args=("${@:2}")
+
+    # Resolve and mount extra paths from forwarded args
+    resolve_extra_mounts "$workspace" "${extra_args[@]}"
+    extra_args=("${REWRITTEN_ARGS[@]}")
 
     build_docker_args "$workspace"
     info "Starting Pi in container '${CONTAINER_NAME}'..."
@@ -251,6 +399,17 @@ attach_pi() {
     local slug
     slug="$(project_slug "$workspace")"
     local extra_args=("${@:2}")
+
+    # Resolve and mount extra paths from forwarded args
+    resolve_extra_mounts "$workspace" "${extra_args[@]}"
+    # NOTE: extra mounts can't be added to a running container via docker exec.
+    # If paths were detected, warn and exit.
+    if [[ ${#EXTRA_MOUNTS[@]} -gt 0 ]]; then
+        error "Extra paths detected but --attach cannot add mounts to a running container"
+        error "Start a new container instead: pi-docker ${REWRITTEN_ARGS[*]}"
+        exit 1
+    fi
+    extra_args=("${REWRITTEN_ARGS[@]}")
 
     local containers
     containers="$(find_running_containers "$slug")"

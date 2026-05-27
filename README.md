@@ -11,6 +11,7 @@ Run the [Pi coding agent](https://github.com/earendil-works/pi-coding-agent) in 
 - **Cached extensions**: `~/.pi/docker/npm-global` persists npm packages across runs — fast startup
 - **Project-aware workspace**: Mounts at `/home/agent/<dirname>` so tools see the real project name
 - **Per-project extensions**: Add project-specific deps via `Dockerfile.extend` (inherits from base)
+- **Auto-mount paths**: File paths in forwarded arguments (e.g. `--extension /path/to/ext`) are auto-detected and mounted into the container
 - **Non-root container**: Matches your host UID/GID so volume mounts work correctly
 
 ## Requirements
@@ -69,7 +70,30 @@ Options:
   --help           Show this help message
 
 Any additional arguments are passed to Pi.
+
+### Auto-Mounting Extra Paths
+
+When `pi-docker` forwards arguments to `pi`, it automatically detects file and directory paths and mounts them into the container. This means you can reference extensions, skills, themes, or any local files — even if they're outside the project workspace — and they'll just work.
+
+**Detected patterns:**
+- Flag-value pairs: `--extension /path/to/ext.js`, `--skill ~/my-skill/`, `--session /tmp/debug.json`
+- `@file` references: `pi-docker @~/docs/instructions.md "What does this say?"`
+- Standalone paths: `pi-docker /some/script.py "Explain this"`
+
+**Mount scheme:** Each detected path is mounted at `/mnt/pi-args/<n>/<basename>` inside the container, and the argument is rewritten to point to that container path. Paths already inside the project workspace or `~/.pi` are skipped (they're already mounted). Duplicate paths reuse the same mount.
+
+```bash
+# Load an extension from outside the workspace — auto-mounted
+pi-docker --extension ~/dev/pi-plugins/my-ext.ts
+
+# Reference a prompt file anywhere on disk
+pi-docker @~/notes/task.md "Implement this"
+
+# Use a custom theme directory
+pi-docker --theme ~/dev/pi-themes/dracula
 ```
+
+> **Note:** Auto-mounts only work when starting a new container (`pi-docker` or `pi-docker --attach` with no extra paths). `--attach` to a running container errors if extra paths are detected, since mounts can't be added to a running container.
 
 ## How It Works
 
@@ -95,6 +119,7 @@ Built from the `Dockerfile`. Contains:
 | `~/.pi/docker/permission-config.json` | `.../pi-permission-system/config.json` | ro | YOLO mode overlay |
 | `~/.pi/docker/npm-global` | `/home/agent/.npm-global` | rw | Cached npm packages (fast startup) |
 | `<project>/` | `/home/agent/<dirname>` | rw | Project source code |
+| `<extra paths>` | `/mnt/pi-args/<n>/<name>` | rw | Auto-mounted from forwarded args |
 | `~/.gitconfig` | `/home/agent/.gitconfig` | ro | Git identity (if exists) |
 | `~/.ssh/known_hosts` | `/home/agent/.ssh/known_hosts` | ro | SSH host verification (if exists) |
 
