@@ -1,9 +1,8 @@
 # =============================================================================
 # Pi Docker — Project Extension File
 # =============================================================================
-# pi-docker automatically detects this file and builds an extended image from
-# it on first run.  Edit this file to add project-specific packages, then just
-# run pi-docker — the extended image is rebuilt and used automatically.
+# pi-docker automatically detects this file on first run and builds an
+# extended image.  Run --extend again after edits:
 #
 # Force a rebuild after edits:
 #     pi-docker --extend

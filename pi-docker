@@ -10,7 +10,7 @@
 #   pi-docker --host-net               # Use host network (container sees localhost)
 #   pi-docker --build                  # Build image then run Pi
 #   pi-docker --rebuild                # Clean rebuild from scratch then run Pi
-#   pi-docker --extend                 # Force rebuild extended image (auto-detected anyway)
+#   pi-docker --extend                 # Build / rebuild project-extended image
 #   pi-docker --shell                  # Drop into a shell inside the container
 #   pi-docker --stop                   # Stop all running containers for this project
 #   pi-docker --clean                  # Remove containers and project image
@@ -229,18 +229,6 @@ build_extended() {
     ok "Extended image built: ${project_image}"
 }
 
-# --- Compare two Docker image timestamps ---
-# Returns 0 (true) if image_a is newer than image_b.
-_image_newer_than() {
-    local image_a="$1" image_b="$2"
-    local ctime_a ctime_b epoch_a epoch_b
-    ctime_a="$(docker image inspect "${image_a}" --format '{{.Created}}' 2>/dev/null)" || return 1
-    ctime_b="$(docker image inspect "${image_b}" --format '{{.Created}}' 2>/dev/null)" || return 1
-    epoch_a="$(date -d "${ctime_a}" '+%s' 2>/dev/null)" || return 1
-    epoch_b="$(date -d "${ctime_b}" '+%s' 2>/dev/null)" || return 1
-    [[ "${epoch_a}" -gt "${epoch_b}" ]]
-}
-
 # --- Check if base image needs rebuilding and warn ---
 check_stale_image() {
     if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
@@ -259,7 +247,9 @@ check_stale_image() {
 }
 
 # --- Resolve which image to use (extended if available, otherwise base) ---
-# Automatically builds the extended image if .pi-dockerfile exists and is needed.
+# If .pi-dockerfile exists and the extended image hasn't been built yet,
+# builds it automatically.  Use --extend to rebuild after editing .pi-dockerfile
+# or after rebuilding the base image.
 # Sets global RESOLVED_IMAGE.
 resolve_image() {
     local workspace="$1"
@@ -274,16 +264,12 @@ resolve_image() {
         return
     fi
 
-    # Auto-build extended image if it doesn't exist yet
+    # Auto-build extended image if it doesn't exist yet (first run)
     if ! docker image inspect "${project_image}" &>/dev/null; then
-        build_extended "$workspace"
-    # Or rebuild if base image is newer (e.g. NODE_PATH was added to Dockerfile)
-    elif _image_newer_than "${BASE_IMAGE}" "${project_image}"; then
-        info "Base image was rebuilt — rebuilding extended image"
         build_extended "$workspace"
     fi
 
-    # Return extended image if it exists now (build may have failed)
+    # Use extended image if it exists (build may have failed)
     if docker image inspect "${project_image}" &>/dev/null; then
         RESOLVED_IMAGE="${project_image}"
         ok "Using extended image: ${project_image}"
@@ -522,7 +508,7 @@ ${BLUE}OPTIONS${NC}
   --build          Build the base image then run Pi
   --rebuild        Clean rebuild from scratch (no cache) then run Pi
   --build-only     Build the base image without running Pi
-  --extend         Force rebuild the project-extended image (.pi-dockerfile)
+  --extend         Build (or rebuild) the project-extended image
   --shell          Drop into a bash shell inside the container
   --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
@@ -559,13 +545,17 @@ ${BLUE}PROJECT EXTENSIONS${NC}
      cp ~/.pi/docker/.pi-dockerfile.template ./.pi-dockerfile
 
   2. Edit .pi-dockerfile (it starts FROM pi-base:latest):
+     USER root
      RUN apt-get update && apt-get install -y libpq-dev
-     RUN uv pip install --system numpy pandas
+     RUN npm install -g pino
 
-  3. Run Pi — the extended image is detected and built automatically:
+  3. Build:
+     pi-docker --extend
+
+  4. Run — the extended image is used automatically:
      pi-docker
 
-  Use --extend to force a rebuild after editing .pi-dockerfile.
+  Run --extend again after editing .pi-dockerfile or rebuilding the base image.
 
 ${BLUE}ENVIRONMENT VARIABLES${NC}
   ANTHROPIC_API_KEY   Passed through to the container
