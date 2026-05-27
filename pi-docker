@@ -221,7 +221,6 @@ build_extended() {
 
     info "Building extended image ${project_image} from ${extend_file}..."
     docker build \
-        --pull \
         --build-arg HOST_UID="$(id -u)" \
         --build-arg HOST_GID="$(id -g)" \
         -t "${project_image}" \
