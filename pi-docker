@@ -185,6 +185,21 @@ project_mount_name() {
     basename "$1"
 }
 
+# --- Ensure base image exists (error + exit if not) ---
+_ensure_base_image() {
+    if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
+        error "Base image not found. Run: pi-docker --build"
+        exit 1
+    fi
+}
+
+# --- Project image name from workspace path ---
+_project_image_name() {
+    local slug
+    slug="$(project_slug "$1")"
+    echo "pi-${slug}:latest"
+}
+
 # --- Build base image ---
 build_base() {
     local no_cache=""
@@ -202,10 +217,9 @@ build_base() {
 # --- Build project-extended image ---
 build_extended() {
     local workspace="$1"
-    local slug
-    slug="$(project_slug "$workspace")"
     local extend_file="${workspace}/.pi-dockerfile"
-    local project_image="pi-${slug}:latest"
+    local project_image
+    project_image="$(_project_image_name "$workspace")"
 
     if [[ ! -f "$extend_file" ]]; then
         warn "No .pi-dockerfile found in ${workspace}"
@@ -214,10 +228,7 @@ build_extended() {
         return
     fi
 
-    if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
-        error "Base image not found. Run: pi-docker --build"
-        exit 1
-    fi
+    _ensure_base_image
 
     info "Building extended image ${project_image} from ${extend_file}..."
     docker build \
@@ -231,10 +242,7 @@ build_extended() {
 
 # --- Check if base image needs rebuilding and warn ---
 check_stale_image() {
-    if ! docker image inspect "${BASE_IMAGE}" &>/dev/null; then
-        error "Base image not found. Run: pi-docker --build"
-        exit 1
-    fi
+    _ensure_base_image
 
     local dockerfile_mtime image_ctime image_epoch
     dockerfile_mtime="$(stat -c '%Y' "${PI_DOCKER_DIR}/Dockerfile" 2>/dev/null)" || return
@@ -253,9 +261,8 @@ check_stale_image() {
 # Sets global RESOLVED_IMAGE.
 resolve_image() {
     local workspace="$1"
-    local slug
-    slug="$(project_slug "$workspace")"
-    local project_image="pi-${slug}:latest"
+    local project_image
+    project_image="$(_project_image_name "$workspace")"
     local extend_file="${workspace}/.pi-dockerfile"
 
     # No .pi-dockerfile → use base image
@@ -449,7 +456,7 @@ stop_container() {
     slug="$(project_slug "$workspace")"
 
     local containers
-    containers="$(docker ps --filter "name=pi-${slug}-" --format '{{.Names}}' 2>/dev/null)" || true
+    containers="$(find_running_containers "$slug")"
 
     if [[ -z "${containers}" ]]; then
         warn "No running containers for project '${slug}'"
@@ -471,7 +478,8 @@ clean() {
     local workspace="$1"
     local slug
     slug="$(project_slug "$workspace")"
-    local project_image="pi-${slug}:latest"
+    local project_image
+    project_image="$(_project_image_name "$workspace")"
 
     info "Cleaning up Pi containers and images for project '${slug}'..."
 
