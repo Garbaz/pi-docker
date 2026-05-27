@@ -42,7 +42,7 @@ export PATH="$HOME/.pi/docker:$PATH"
 pi-docker --build
 
 # Or: clean rebuild from scratch (no Docker cache) then run
-pi-docker --rebuild
+pi-docker --force-rebuild
 
 # Just build without running (e.g. for CI)
 pi-docker --build-only
@@ -62,8 +62,10 @@ Options:
   --project DIR    Use DIR as workspace (default: current directory)
   --attach         Attach to a running container for this project
   --gpus           Pass all NVIDIA GPUs to the container
-  --build          Build or rebuild the base Pi Docker image
-  --extend         Build (or rebuild) the project-extended image
+  --build          Build the base image then run Pi
+  --force-rebuild  Clean rebuild from scratch (no cache) then run Pi
+  --build-only     Build the base image without running Pi
+  --extend         Build (or rebuild) the extended image then run Pi
   --shell          Drop into a bash shell inside the container
   --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
@@ -171,9 +173,9 @@ Extended images inherit all layers from `pi-base:latest` — only the new layers
 - **Attach to a running container**: Use `pi-docker --attach` to join an already running Pi session in the same project
 - **GPU access**: Pass `--gpus` to enable NVIDIA GPU passthrough (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/installation-guide.html))
 - **SSH agent forwarding**: If you need git push access, mount your SSH agent: add `-v $SSH_AUTH_SOCK:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent`
-- **Rebuilding after Pi updates**: Run `pi-docker --build` to pick up the latest Pi version
+- **All build flags run Pi**: `--build`, `--force-rebuild`, and `--extend` all build then start Pi. Use `--build-only` to build without running.
 - **Custom API keys**: Set them in your shell before running: `OPENAI_API_KEY=sk-... pi-docker`
-- **Stale image warning**: If the Dockerfile changed since your last build, `pi-docker` will warn you to run `--build`
+- **Stale image warning**: If the Dockerfile changed since your last build, `pi-docker` will warn you to run `--force-rebuild`
 
 ## File Structure
 

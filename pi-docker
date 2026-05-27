@@ -9,8 +9,8 @@
 #   pi-docker --gpus                   # Run with NVIDIA GPU passthrough
 #   pi-docker --host-net               # Use host network (container sees localhost)
 #   pi-docker --build                  # Build image then run Pi
-#   pi-docker --rebuild                # Clean rebuild from scratch then run Pi
-#   pi-docker --extend                 # Build / rebuild project-extended image
+#   pi-docker --force-rebuild            # Clean rebuild from scratch then run Pi
+#   pi-docker --extend                 # Build/rebuild extended image then run Pi
 #   pi-docker --shell                  # Drop into a shell inside the container
 #   pi-docker --stop                   # Stop all running containers for this project
 #   pi-docker --clean                  # Remove containers and project image
@@ -242,7 +242,7 @@ check_stale_image() {
     image_epoch="$(date -d "${image_ctime}" '+%s' 2>/dev/null)" || return
 
     if [[ "${dockerfile_mtime}" -gt "${image_epoch}" ]]; then
-        warn "Dockerfile changed since last build. Run: pi-docker --rebuild for a clean rebuild"
+        warn "Dockerfile changed since last build. Run: pi-docker --force-rebuild for a clean rebuild"
     fi
 }
 
@@ -505,10 +505,10 @@ ${BLUE}OPTIONS${NC}
   --attach         Attach to a running container for this project
   --gpus           Pass all NVIDIA GPUs to the container (--gpus all)
   --host-net       Use host network namespace (container sees localhost)
-  --build          Build the base image then run Pi
-  --rebuild        Clean rebuild from scratch (no cache) then run Pi
-  --build-only     Build the base image without running Pi
-  --extend         Build (or rebuild) the project-extended image
+  --force-rebuild  Clean rebuild from scratch (no cache) then run Pi
+  --build           Build the base image then run Pi
+  --build-only      Build the base image without running Pi
+  --extend          Build (or rebuild) the extended image then run Pi
   --shell          Drop into a bash shell inside the container
   --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
@@ -556,6 +556,7 @@ ${BLUE}PROJECT EXTENSIONS${NC}
      pi-docker
 
   Run --extend again after editing .pi-dockerfile or rebuilding the base image.
+  All build flags (--build, --force-rebuild, --extend) run Pi after building.
 
 ${BLUE}ENVIRONMENT VARIABLES${NC}
   ANTHROPIC_API_KEY   Passed through to the container
@@ -597,7 +598,7 @@ main() {
                 host_network=1
                 shift
                 ;;
-            --rebuild)
+            --force-rebuild)
                 action="rebuild"
                 shift
                 ;;
@@ -663,6 +664,8 @@ main() {
             ;;
         extend)
             build_extended "${workspace}"
+            check_stale_image
+            run_pi "${workspace}" "$@"
             ;;
         shell)
             check_stale_image
