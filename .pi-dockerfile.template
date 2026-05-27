@@ -14,25 +14,11 @@
 
 FROM pi-base:latest
 
+# ---- Root: system packages, Python dependencies, etc. ----
 USER root
-
-# ---- Add project-specific system packages ----
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#     libpq-dev \
-#     libsqlite3-dev \
+# RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev \
 #     && rm -rf /var/lib/apt/lists/*
 
-# ---- Add project-specific Python packages ----
-# RUN uv pip install --system \
-#     numpy \
-#     pandas \
-#     httpx
-
-# ---- Add project-specific Node packages ----
-# RUN npm install -g typescript ts-node
-
-# ---- Copy project-specific config ----
-# COPY --chown=agent:agent .pi-docker/ /home/agent/.pi-extra/
-
+# ---- Agent: user-level packages (npm, pip --user, cargo, etc.) ----
 USER agent
-# WORKDIR is set at runtime by the pi-docker wrapper to /home/agent/<project-name>
+# RUN npm install -g pino
