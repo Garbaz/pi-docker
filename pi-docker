@@ -221,12 +221,25 @@ build_extended() {
 
     info "Building extended image ${project_image} from ${extend_file}..."
     docker build \
+        --pull \
         --build-arg HOST_UID="$(id -u)" \
         --build-arg HOST_GID="$(id -g)" \
         -t "${project_image}" \
         -f "${extend_file}" \
         "${workspace}/"
     ok "Extended image built: ${project_image}"
+}
+
+# --- Compare two Docker image timestamps ---
+# Returns 0 (true) if image_a is newer than image_b.
+_image_newer_than() {
+    local image_a="$1" image_b="$2"
+    local ctime_a ctime_b epoch_a epoch_b
+    ctime_a="$(docker image inspect "${image_a}" --format '{{.Created}}' 2>/dev/null)" || return 1
+    ctime_b="$(docker image inspect "${image_b}" --format '{{.Created}}' 2>/dev/null)" || return 1
+    epoch_a="$(date -d "${ctime_a}" '+%s' 2>/dev/null)" || return 1
+    epoch_b="$(date -d "${ctime_b}" '+%s' 2>/dev/null)" || return 1
+    [[ "${epoch_a}" -gt "${epoch_b}" ]]
 }
 
 # --- Check if base image needs rebuilding and warn ---
@@ -263,6 +276,10 @@ resolve_image() {
 
     # Auto-build extended image if it doesn't exist yet
     if ! docker image inspect "${project_image}" &>/dev/null; then
+        build_extended "$workspace" >&2
+    # Or rebuild if base image is newer (e.g. NODE_PATH was added to Dockerfile)
+    elif _image_newer_than "${BASE_IMAGE}" "${project_image}"; then
+        info "Base image was rebuilt — rebuilding extended image" >&2
         build_extended "$workspace" >&2
     fi
 
