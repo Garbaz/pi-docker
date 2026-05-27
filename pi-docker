@@ -260,6 +260,7 @@ check_stale_image() {
 
 # --- Resolve which image to use (extended if available, otherwise base) ---
 # Automatically builds the extended image if .pi-dockerfile exists and is needed.
+# Sets global RESOLVED_IMAGE.
 resolve_image() {
     local workspace="$1"
     local slug
@@ -269,26 +270,26 @@ resolve_image() {
 
     # No .pi-dockerfile → use base image
     if [[ ! -f "$extend_file" ]]; then
-        echo "${BASE_IMAGE}"
+        RESOLVED_IMAGE="${BASE_IMAGE}"
         return
     fi
 
     # Auto-build extended image if it doesn't exist yet
     if ! docker image inspect "${project_image}" &>/dev/null; then
-        build_extended "$workspace" >&2
+        build_extended "$workspace"
     # Or rebuild if base image is newer (e.g. NODE_PATH was added to Dockerfile)
     elif _image_newer_than "${BASE_IMAGE}" "${project_image}"; then
-        info "Base image was rebuilt — rebuilding extended image" >&2
-        build_extended "$workspace" >&2
+        info "Base image was rebuilt — rebuilding extended image"
+        build_extended "$workspace"
     fi
 
     # Return extended image if it exists now (build may have failed)
     if docker image inspect "${project_image}" &>/dev/null; then
-        echo "${project_image}"
-        ok "Using extended image: ${project_image}" >&2
+        RESOLVED_IMAGE="${project_image}"
+        ok "Using extended image: ${project_image}"
     else
-        warn "Extended image build failed or not found, falling back to base image" >&2
-        echo "${BASE_IMAGE}"
+        warn "Extended image build failed or not found, falling back to base image"
+        RESOLVED_IMAGE="${BASE_IMAGE}"
     fi
 }
 
@@ -326,8 +327,8 @@ build_docker_args() {
     mount_name="$(project_mount_name "$workspace")"
     CONTAINER_WORKDIR="/home/agent/${mount_name}"
     CONTAINER_NAME="$(container_name "$slug")"
-    local use_image
-    use_image="$(resolve_image "$workspace")"
+    resolve_image "$workspace"
+    local use_image="${RESOLVED_IMAGE}"
 
     # TTY
     if [[ -t 0 ]]; then
