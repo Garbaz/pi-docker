@@ -263,15 +263,15 @@ resolve_image() {
 
     # Auto-build extended image if it doesn't exist yet
     if ! docker image inspect "${project_image}" &>/dev/null; then
-        build_extended "$workspace"
+        build_extended "$workspace" >&2
     fi
 
     # Return extended image if it exists now (build may have failed)
     if docker image inspect "${project_image}" &>/dev/null; then
         echo "${project_image}"
-        ok "Using extended image: ${project_image}"
+        ok "Using extended image: ${project_image}" >&2
     else
-        warn "Extended image build failed or not found, falling back to base image"
+        warn "Extended image build failed or not found, falling back to base image" >&2
         echo "${BASE_IMAGE}"
     fi
 }
