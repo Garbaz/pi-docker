@@ -1,10 +1,15 @@
 # =============================================================================
-# Pi Docker Isolation — .pi-dockerfile Template
+# Pi Docker — Project Extension File
 # =============================================================================
-# Place this in your project root as .pi-dockerfile and customize it.
-# It inherits everything from the pi-base image (Node, Python, uv, git, gh, pi).
+# When pi-docker runs in a directory containing .pi-dockerfile, it automatically
+# detects it and uses the extended image.  Build it once with:
 #
-# Build:  docker build -t pi-<project>:latest -f .pi-dockerfile .
+#     pi-docker --extend
+#
+# After that, every pi-docker invocation picks up the extended image.
+#
+# This file inherits from pi-base:latest (Node, Python, uv, git, gh, pi, etc.).
+# Add project-specific packages, tools, or config below.
 # =============================================================================
 
 FROM pi-base:latest

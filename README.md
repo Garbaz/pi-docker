@@ -136,7 +136,9 @@ A minimal `permission-config.json` with `{ "yoloMode": true }` is mounted over t
 
 ## Project Extensions
 
-Add project-specific dependencies by creating a `.pi-dockerfile` in your project root:
+Add project-specific dependencies by creating a `.pi-dockerfile` in your project root.
+`pi-docker` automatically detects it — build once with `--extend`, then every
+subsequent run uses the extended image.
 
 ```bash
 # 1. Copy the template
@@ -149,10 +151,10 @@ cp ~/.pi/docker/.pi-dockerfile.template ./.pi-dockerfile
 #    RUN uv pip install --system numpy pandas httpx
 #    USER agent
 
-# 3. Build the extended image
+# 3. Build the extended image (only needed once, or after edits)
 pi-docker --extend
 
-# 4. Run — the extended image is used automatically
+# 4. Run — the extended image is detected and used automatically
 pi-docker
 ```
 
