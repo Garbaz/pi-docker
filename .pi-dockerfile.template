@@ -1,12 +1,12 @@
 # =============================================================================
 # Pi Docker — Project Extension File
 # =============================================================================
-# When pi-docker runs in a directory containing .pi-dockerfile, it automatically
-# detects it and uses the extended image.  Build it once with:
+# pi-docker automatically detects this file and builds an extended image from
+# it on first run.  Edit this file to add project-specific packages, then just
+# run pi-docker — the extended image is rebuilt and used automatically.
 #
+# Force a rebuild after edits:
 #     pi-docker --extend
-#
-# After that, every pi-docker invocation picks up the extended image.
 #
 # This file inherits from pi-base:latest (Node, Python, uv, git, gh, pi, etc.).
 # Add project-specific packages, tools, or config below.

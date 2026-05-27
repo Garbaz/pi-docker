@@ -10,7 +10,7 @@
 #   pi-docker --host-net               # Use host network (container sees localhost)
 #   pi-docker --build                  # Build image then run Pi
 #   pi-docker --rebuild                # Clean rebuild from scratch then run Pi
-#   pi-docker --extend                 # Build project-extended image (from .pi-dockerfile)
+#   pi-docker --extend                 # Force rebuild extended image (auto-detected anyway)
 #   pi-docker --shell                  # Drop into a shell inside the container
 #   pi-docker --stop                   # Stop all running containers for this project
 #   pi-docker --clean                  # Remove containers and project image
@@ -247,16 +247,31 @@ check_stale_image() {
 }
 
 # --- Resolve which image to use (extended if available, otherwise base) ---
+# Automatically builds the extended image if .pi-dockerfile exists and is needed.
 resolve_image() {
     local workspace="$1"
     local slug
     slug="$(project_slug "$workspace")"
     local project_image="pi-${slug}:latest"
+    local extend_file="${workspace}/.pi-dockerfile"
 
+    # No .pi-dockerfile → use base image
+    if [[ ! -f "$extend_file" ]]; then
+        echo "${BASE_IMAGE}"
+        return
+    fi
+
+    # Auto-build extended image if it doesn't exist yet
+    if ! docker image inspect "${project_image}" &>/dev/null; then
+        build_extended "$workspace"
+    fi
+
+    # Return extended image if it exists now (build may have failed)
     if docker image inspect "${project_image}" &>/dev/null; then
         echo "${project_image}"
         ok "Using extended image: ${project_image}"
     else
+        warn "Extended image build failed or not found, falling back to base image"
         echo "${BASE_IMAGE}"
     fi
 }
@@ -490,7 +505,7 @@ ${BLUE}OPTIONS${NC}
   --build          Build the base image then run Pi
   --rebuild        Clean rebuild from scratch (no cache) then run Pi
   --build-only     Build the base image without running Pi
-  --extend         Build the project-extended image (requires .pi-dockerfile)
+  --extend         Force rebuild the project-extended image (.pi-dockerfile)
   --shell          Drop into a bash shell inside the container
   --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
@@ -530,11 +545,10 @@ ${BLUE}PROJECT EXTENSIONS${NC}
      RUN apt-get update && apt-get install -y libpq-dev
      RUN uv pip install --system numpy pandas
 
-  3. Build the extended image:
-     pi-docker --extend
-
-  4. Run Pi — the extended image is used automatically:
+  3. Run Pi — the extended image is detected and built automatically:
      pi-docker
+
+  Use --extend to force a rebuild after editing .pi-dockerfile.
 
 ${BLUE}ENVIRONMENT VARIABLES${NC}
   ANTHROPIC_API_KEY   Passed through to the container

@@ -63,7 +63,7 @@ Options:
   --attach         Attach to a running container for this project
   --gpus           Pass all NVIDIA GPUs to the container
   --build          Build or rebuild the base Pi Docker image
-  --extend         Build project-extended image (requires .pi-dockerfile)
+  --extend         Force rebuild the project-extended image (.pi-dockerfile)
   --shell          Drop into a bash shell inside the container
   --stop           Stop all running containers for this project
   --clean          Remove containers and project-specific image
@@ -137,25 +137,20 @@ A minimal `permission-config.json` with `{ "yoloMode": true }` is mounted over t
 ## Project Extensions
 
 Add project-specific dependencies by creating a `.pi-dockerfile` in your project root.
-`pi-docker` automatically detects it — build once with `--extend`, then every
-subsequent run uses the extended image.
+`pi-docker` detects it automatically — builds the extended image on first run,
+uses it on every subsequent invocation.
 
 ```bash
 # 1. Copy the template
 cp ~/.pi/docker/.pi-dockerfile.template ./.pi-dockerfile
 
 # 2. Edit it — add whatever you need
-#    FROM pi-base:latest
-#    USER root
-#    RUN apt-get update && apt-get install -y libpq-dev
-#    RUN uv pip install --system numpy pandas httpx
-#    USER agent
 
-# 3. Build the extended image (only needed once, or after edits)
-pi-docker --extend
-
-# 4. Run — the extended image is detected and used automatically
+# 3. Run — the extended image is built and used automatically
 pi-docker
+
+# After editing .pi-dockerfile, force a rebuild:
+pi-docker --extend
 ```
 
 Extended images inherit all layers from `pi-base:latest` — only the new layers are rebuilt.
